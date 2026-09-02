@@ -13,8 +13,8 @@ permissions:
 jobs:
   build-ipa:
     name: Build unsigned iOS IPA
-    runs-on: macos-26
-    timeout-minutes: 60
+    runs-on: xcode-27
+    timeout-minutes: 90
 
     steps:
       - name: Checkout source
