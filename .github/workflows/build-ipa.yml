@@ -1,0 +1,95 @@
+name: Build IPA Artifact
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/build-ipa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    name: Build unsigned iOS IPA
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Show Apple toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Create CI config
+        run: cp app/Config/Secrets.xcconfig.example app/Config/Secrets.xcconfig
+
+      - name: Build Rust XCFramework
+        run: |
+          chmod +x build-xcframework.sh
+          ./build-xcframework.sh release
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild \
+            -project app/Pinkha.xcodeproj \
+            -scheme PinkhaRelease \
+            -resolvePackageDependencies
+
+      - name: Build iOS app without signing
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project app/Pinkha.xcodeproj \
+            -scheme PinkhaRelease \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            clean build | tee build/xcodebuild.log
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle was produced."
+            exit 1
+          fi
+
+          rm -rf build/Payload
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+
+          cd build
+          zip -qry Pinkha-unsigned.ipa Payload
+          shasum -a 256 Pinkha-unsigned.ipa > Pinkha-unsigned.ipa.sha256
+          ls -lh Pinkha-unsigned.ipa Pinkha-unsigned.ipa.sha256
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pinkha-unsigned-IPA
+          path: |
+            build/Pinkha-unsigned.ipa
+            build/Pinkha-unsigned.ipa.sha256
+            build/xcodebuild.log
+          if-no-files-found: error
+          retention-days: 14
