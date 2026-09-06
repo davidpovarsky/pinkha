@@ -3,6 +3,8 @@ import PinkhaFFI
 import PinkhaCore
 import PinkhaComposer
 import PinkhaDesignSystem
+import PinkhaTorahCore
+import PinkhaTorahUI
 
 // ── Leaf view ─────────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ public struct LeafView: View {
     /// Drives the flush-on-background below.
     @Environment(\.scenePhase) var scenePhase
     @State var showingBlockPicker = false
+    @State var torahTarget: TorahTarget?
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
     @State var titleFocusOffset: Int? = nil
@@ -253,6 +256,9 @@ public struct LeafView: View {
                     if let nouvelleIcone {
                         recentEmojis = saveRecentEmoji(nouvelleIcone)
                     }
+                },
+                onTorahAssociations: readerMode.isActive ? nil : {
+                    torahTarget = .leaf(vm.leafId)
                 }
             )
             .listRowBackground(Color.clear).listRowSeparator(.hidden)
@@ -628,6 +634,13 @@ public struct LeafView: View {
         }
         .sheet(isPresented: $showingBlockPicker) {
             BlockPickerSheet { type in vm.addBlock(type: type, afterId: vm.activeBlockId) }
+        }
+        .sheet(item: $torahTarget) { target in
+            if let path = store.activeDatabasePath {
+                TorahAssociationSheet(databasePath: path, target: target)
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
         }
         .sheet(isPresented: $showingPublishDateSheet) {
             LeafPublishDateSheet(

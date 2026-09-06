@@ -2,6 +2,8 @@ import SwiftUI
 import PinkhaCore
 import PinkhaFFI
 import PinkhaRichText
+import PinkhaTorahCore
+import PinkhaTorahUI
 
 // ── Building callbacks and block rows ────────────────────────────────────────
 
@@ -137,6 +139,14 @@ public extension LeafView {
                     Label("Outdent", systemImage: "arrow.left.to.line")
                 }
                 .tint(.orange)
+                Button {
+                    Haptic.tap()
+                    torahTarget = .block(leafID: vm.leafId, blockID: b.id)
+                } label: {
+                    Label(TorahStrings.links, systemImage: "books.vertical")
+                }
+                .tint(.indigo)
+                .accessibilityIdentifier("blockTorahLinksSwipeAction")
             }
         }
     }
@@ -265,6 +275,9 @@ public extension LeafView {
                     title: $0.titlePlain.isEmpty ? "Untitled" : $0.titlePlain) }
             },
             onDuplicate: { vm.duplicateBlock(id: block.id) },
+            onTorahAssociations: vm.locked || readerMode.isActive ? nil : {
+                torahTarget = .block(leafID: vm.leafId, blockID: block.id)
+            },
             accentColor: effectiveAccentColor,
             themeForegroundColor: effectiveTheme.effectiveForegroundColor(darkVariant: effectiveThemeDarkVariant),
             keyboardAppearance: effectiveKeyboardAppearance,

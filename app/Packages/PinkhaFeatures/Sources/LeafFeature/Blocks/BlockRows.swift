@@ -1,4 +1,5 @@
 import SwiftUI
+import PinkhaTorahUI
 import PinkhaCore
 import PinkhaFFI
 import PinkhaRichText
@@ -89,6 +90,8 @@ public struct BlockCallbacks {
     /// inserts the copy right after the original. The VM focuses the
     /// new block once the reload settles.
     public var onDuplicate: (() -> Void)? = nil
+    /// Opens the shared provider-neutral association editor for this block.
+    public var onTorahAssociations: (() -> Void)? = nil
     /// Accent color the row should paint its accented affordances with
     /// (todo checkmark, etc.). Resolved at the LeafView level so a
     /// per-doc accent overrides the global setting; the default falls
@@ -310,6 +313,16 @@ public struct BlockRowView: View {
                         Image(uiImage: Self.neutralIcon("plus.square.on.square"))
                     }
                 }
+            }
+            if let onTorahAssociations = cb.onTorahAssociations {
+                Button(action: onTorahAssociations) {
+                    Label {
+                        Text(TorahStrings.links)
+                    } icon: {
+                        Image(uiImage: Self.neutralIcon("books.vertical"))
+                    }
+                }
+                .accessibilityIdentifier("blockTorahLinksContextMenu")
             }
             // "Change to" — convert the existing block to another
             // type while preserving its inline content (text spans).

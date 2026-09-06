@@ -33,6 +33,9 @@ public final class PinkhaStore {
     public var hasInboxNotification: Bool = false
 
     @ObservationIgnored public private(set) var api: PinkhaApi?
+    /// Exact database opened by `api`. Extension packages use this path to
+    /// create isolated tables in the same snapshot without crossing the FFI.
+    @ObservationIgnored public private(set) var activeDatabasePath: String?
 
     public init() {}
 
@@ -66,6 +69,7 @@ public final class PinkhaStore {
                 ? try DatabaseLocation.ephemeralDatabasePath()
                 : try DatabaseLocation.databasePath()
             api = try PinkhaApi(dbPath: path)
+            activeDatabasePath = path
             if args.contains("--ui-test-data") {
                 _ = try api?.createLeaf(title: "Seeded Leaf 2")
                 _ = try api?.createLeaf(title: "Seeded Leaf 1")

@@ -28,7 +28,8 @@ let package = Package(
         .package(path: "../PinkhaCore"),
         .package(path: "../PinkhaDesignSystem"),
         .package(path: "../PinkhaRichText"),
-        .package(path: "../PinkhaComposer")
+        .package(path: "../PinkhaComposer"),
+        .package(path: "../PinkhaTorah")
     ],
     targets: [
         .target(
@@ -38,7 +39,9 @@ let package = Package(
                 .product(name: "PinkhaCore",         package: "PinkhaCore"),
                 .product(name: "PinkhaDesignSystem", package: "PinkhaDesignSystem"),
                 .product(name: "PinkhaRichText",     package: "PinkhaRichText"),
-                .product(name: "PinkhaComposer",     package: "PinkhaComposer")
+                .product(name: "PinkhaComposer",     package: "PinkhaComposer"),
+                .product(name: "PinkhaTorahCore",   package: "PinkhaTorah"),
+                .product(name: "PinkhaTorahUI",     package: "PinkhaTorah")
             ],
             path: "Sources/LeafFeature"
         ),
