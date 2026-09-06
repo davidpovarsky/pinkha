@@ -19,7 +19,7 @@ public actor TorahStore {
         catch { sqlite3_close(handle); db = nil; throw error }
     }
 
-    deinit { if let db { sqlite3_close(db) } }
+    isolated deinit { if let db { sqlite3_close(db) } }
 
     private static func migrate(_ db: OpaquePointer) throws {
         let sql = """
