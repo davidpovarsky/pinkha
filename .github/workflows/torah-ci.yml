@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
       - name: Environment
         run: |
           set -euo pipefail
