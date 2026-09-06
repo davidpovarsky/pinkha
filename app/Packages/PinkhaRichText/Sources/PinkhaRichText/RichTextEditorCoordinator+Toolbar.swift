@@ -220,9 +220,7 @@ extension RichTextEditorCoordinator {
         toolbarActionInProgress = false
         shiftEnterTyped = true
         tv?.insertText("\n")
-        // Defensive reset: programmatic `insertText` can bypass `shouldChangeTextIn`,
-        // leaving `shiftEnterTyped = true`. The next keyboard Enter would then be
-        // treated as a line break instead of splitting the block.
+        // Defensive reset: programmatic `insertText` can bypass the delegate.
         shiftEnterTyped = false
     }
 

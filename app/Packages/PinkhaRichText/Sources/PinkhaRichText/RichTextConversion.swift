@@ -1,6 +1,23 @@
 import UIKit
 import PinkhaFFI
 
+public let pinkhaParagraphSeparator = "\u{2029}"
+public let pinkhaLineSeparator = "\u{2028}"
+
+/// Legacy LF represented a visual line break. Normalize only in the editor's
+/// attributed value; persistence is updated naturally on the next user save.
+public func normalizedRichText(_ value: String) -> String {
+    value.replacingOccurrences(of: "\r\n", with: pinkhaLineSeparator)
+        .replacingOccurrences(of: "\r", with: pinkhaLineSeparator)
+        .replacingOccurrences(of: "\n", with: pinkhaLineSeparator)
+}
+
+public func pinkhaParagraphStyle(for font: UIFont) -> NSParagraphStyle {
+    let style = NSMutableParagraphStyle()
+    style.paragraphSpacing = font.lineHeight * 0.45
+    return style
+}
+
 // ── Conversion Span ↔ NSAttributedString ─────────────────────────────────────
 
 /// Converts an array of `InlineTextFfi` spans into an `NSAttributedString` using `police` as the base font.
@@ -37,12 +54,13 @@ public func spansToAttributed(
             }
         }
         attrs[.font] = fontWithTraits(police, bold: isBold, italic: isItalic)
+        attrs[.paragraphStyle] = pinkhaParagraphStyle(for: police)
         if isBold   { attrs[.pinkhaBold]   = true }
         if isItalic {
             attrs[.pinkhaItalic] = true
             attrs[.pinkhaObliqueness] = 0.2
         }
-        result.append(NSAttributedString(string: span.content, attributes: attrs))
+        result.append(NSAttributedString(string: normalizedRichText(span.content), attributes: attrs))
     }
     return result
 }

@@ -227,25 +227,9 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         }
         // Enter key
         if text == "\n" {
-            if shiftEnterTyped {
-                // Shift+Enter: let the line break insert normally
-                shiftEnterTyped = false
-                return true
-            }
-            // Normal Enter: split the block and create a new one.
-            // Preserve the attributes (color, bold…) of the portion after the cursor.
-            let afterStart = range.location + range.length
-            let attrBefore = tv.attributedText.attributedSubstring(
-                from: NSRange(location: 0, length: range.location))
-            let attrAfter = tv.attributedText.attributedSubstring(
-                from: NSRange(location: afterStart, length: tv.attributedText.length - afterStart))
-            let afterSpans = attributedToSpans(attrAfter, police: parent.baseFont)
-            tv.attributedText = attrBefore.string.isEmpty
-                ? NSAttributedString(string: "", attributes: [.font: parent.baseFont, .foregroundColor: UIColor.label])
-                : attrBefore
-            tv.selectedRange = NSRange(location: attrBefore.length, length: 0)
-            save(attributedToSpans(attrBefore, police: parent.baseFont))
-            parent.onNewBlock?(afterSpans)
+            let separator = shiftEnterTyped ? pinkhaLineSeparator : pinkhaParagraphSeparator
+            shiftEnterTyped = false
+            insertSemanticBreak(separator, in: tv, replacing: range)
             return false
         }
         // Typing color: UIKit resets typingAttributes after each character,
@@ -255,6 +239,23 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
             tv.typingAttributes[.pinkhaColor]     = nom
         }
         return true
+    }
+
+    /// Inserts a semantic separator while preserving the active inline style.
+    /// Return stays in this block; creating another block remains an explicit UI action.
+    private func insertSemanticBreak(_ separator: String, in tv: UITextView, replacing range: NSRange) {
+        var attributes = tv.typingAttributes
+        if range.location > 0, range.location <= tv.attributedText.length {
+            attributes.merge(tv.attributedText.attributes(at: range.location - 1, effectiveRange: nil)) { current, _ in current }
+        }
+        attributes[.font] = attributes[.font] ?? parent.baseFont
+        attributes[.foregroundColor] = attributes[.foregroundColor] ?? UIColor.label
+        attributes[.paragraphStyle] = pinkhaParagraphStyle(for: parent.baseFont)
+        tv.textStorage.replaceCharacters(in: range, with: NSAttributedString(string: separator, attributes: attributes))
+        tv.selectedRange = NSRange(location: range.location + 1, length: 0)
+        tv.typingAttributes = attributes
+        save(attributedToSpans(tv.attributedText, police: parent.baseFont))
+        tv.invalidateIntrinsicContentSize()
     }
 
     public func textViewDidEndEditing(_ tv: UITextView) {

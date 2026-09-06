@@ -77,6 +77,24 @@ struct AttributedRoundTripTests {
         #expect(styles.contains(.bold))
         #expect(styles.contains(.italic))
     }
+
+    @Test func semanticParagraphAndLineSeparatorsRoundTrip() {
+        let content = "פסקה א\u{2029}פסקה ב\u{2028}שורה"
+        let spans = [InlineTextFfi(content: content, styles: [.bold])]
+        let attributed = spansToAttributed(spans, police: font)
+        #expect(attributed.string == content)
+        #expect(attributedToSpans(attributed, police: font).map(\.content).joined() == content)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
+        #expect(abs((style?.paragraphSpacing ?? 0) - font.lineHeight * 0.45) < 0.01)
+    }
+
+    @Test func legacyNewlineNormalizesToSoftLineSeparator() {
+        let attributed = spansToAttributed(
+            [InlineTextFfi(content: "ישן\nחדש", styles: [.italic])], police: font)
+        #expect(attributed.string == "ישן\u{2028}חדש")
+        let styles = attributedToSpans(attributed, police: font).flatMap(\.styles).map(StyleKey.from)
+        #expect(styles.contains(.italic))
+    }
 }
 
 /// Reduces `InlineStyleFfi` to a simple Hashable identifier for tests
