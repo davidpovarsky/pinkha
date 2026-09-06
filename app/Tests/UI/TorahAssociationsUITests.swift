@@ -57,7 +57,7 @@ final class TorahAssociationsUITests: XCTestCase {
         app.staticTexts["New block"].tap()
         XCTAssertTrue(app.staticTexts["Add a block"].waitForExistence(timeout: 3))
         app.staticTexts["Text"].tap()
-        let editor = app.textViews.lastMatch
+        let editor = app.textViews.element(boundBy: max(0, app.textViews.count - 1))
         XCTAssertTrue(editor.waitForExistence(timeout: 5)); editor.tap(); editor.typeText("Block Torah target")
         editor.swipeLeft()
         let swipeAction = app.buttons["blockTorahLinksSwipeAction"]

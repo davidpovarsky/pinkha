@@ -15,7 +15,7 @@ final class BlockParagraphBreakUITests: XCTestCase {
         title.typeKey(.return, modifierFlags: [])
         XCTAssertGreaterThanOrEqual(app.textViews.count, 2, "Return in title must create the first block")
 
-        let block = app.textViews.lastMatch
+        let block = app.textViews.element(boundBy: max(0, app.textViews.count - 1))
         block.tap(); block.typeText("פסקה ראשונה")
         let countBeforeParagraph = app.textViews.count
         block.typeKey(.return, modifierFlags: [])

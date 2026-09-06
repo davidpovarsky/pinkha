@@ -3,8 +3,15 @@ import Foundation
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+private final class SQLiteConnection: @unchecked Sendable {
+    let handle: OpaquePointer
+    init(_ handle: OpaquePointer) { self.handle = handle }
+    deinit { sqlite3_close(handle) }
+}
+
 public actor TorahStore {
-    private var db: OpaquePointer?
+    private let connection: SQLiteConnection
+    private var db: OpaquePointer { connection.handle }
     private let encoder = ISO8601DateFormatter()
 
     public init(databasePath: String) throws {
@@ -13,13 +20,11 @@ public actor TorahStore {
               let handle else {
             throw TorahError.storage("Unable to open Torah storage.")
         }
-        db = handle
         sqlite3_busy_timeout(handle, 3_000)
         do { try Self.migrate(handle) }
-        catch { sqlite3_close(handle); db = nil; throw error }
+        catch { sqlite3_close(handle); throw error }
+        connection = SQLiteConnection(handle)
     }
-
-    isolated deinit { if let db { sqlite3_close(db) } }
 
     private static func migrate(_ db: OpaquePointer) throws {
         let sql = """
@@ -163,13 +168,12 @@ public actor TorahStore {
     }
 
     private func prepare(_ sql: String) throws -> OpaquePointer {
-        guard let db else { throw TorahError.storage("Torah storage is closed.") }
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw lastError() }
         return statement
     }
     private func execute(_ sql: String) throws {
-        guard let db, sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw lastError() }
+        guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw lastError() }
     }
     private func bind(_ value: String?, at index: Int32, to statement: OpaquePointer?) {
         if let value { sqlite3_bind_text(statement, index, value, -1, sqliteTransient) }
@@ -183,7 +187,6 @@ public actor TorahStore {
         sqlite3_column_type(statement, index) == SQLITE_NULL ? nil : text(statement, index)
     }
     private func lastError() -> TorahError {
-        guard let db else { return .storage("Torah storage is closed.") }
         return .storage(String(cString: sqlite3_errmsg(db)))
     }
 }
