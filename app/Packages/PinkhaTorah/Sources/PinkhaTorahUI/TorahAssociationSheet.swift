@@ -95,12 +95,16 @@ private struct TorahSearchPicker: View {
                 if searching { ProgressView().frame(maxWidth: .infinity) }
                 switch kind {
                 case .ref:
-                    ForEach(references) { value in Button(value.label) { saveReference(value.id) } }
+                    ForEach(references) { value in
+                        Button(value.label) { saveReference(value.id) }
+                            .accessibilityIdentifier("torahReferenceResult.\(value.id)")
+                    }
                 case .topic:
                     ForEach(topics) { value in
                         Button { saveTopic(value.id) } label: {
                             VStack(alignment: .leading) { Text(value.labelHe); if let en = value.labelEn { Text(en).font(.caption).foregroundStyle(.secondary) } }
                         }
+                        .accessibilityIdentifier("torahTopicResult.\(value.id)")
                     }
                 case .word:
                     ForEach(words) { value in
@@ -110,6 +114,7 @@ private struct TorahSearchPicker: View {
                                 Text([value.lexicon, value.description].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .accessibilityIdentifier("torahWordResult.\(value.id)")
                     }
                 }
                 if !query.isEmpty && !searching && references.isEmpty && topics.isEmpty && words.isEmpty {
@@ -118,7 +123,6 @@ private struct TorahSearchPicker: View {
             }
             .navigationTitle(title)
             .searchable(text: $query, prompt: prompt)
-            .textInputAutocapitalization(.never)
             .task(id: query) { await search() }
             .task { if kind == .topic { try? await workspace.refreshTopicIndexIfNeeded() } }
             .toolbar {
