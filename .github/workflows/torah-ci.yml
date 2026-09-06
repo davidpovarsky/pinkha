@@ -1,0 +1,76 @@
+name: Torah CI
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: torah-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Torah core and provider tests
+    runs-on: xcode-27
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Swift package tests
+        run: swift test --package-path app/Packages/PinkhaTorah
+
+  simulator:
+    name: Real iOS simulator XCUITest
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Environment
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          xcodegen --version
+      - name: Build Pinkha Rust XCFramework
+        run: ./extensions/torah/scripts/build-with-torah.sh
+      - name: Build configuration
+        run: |
+          cp app/Config/Secrets.xcconfig.example app/Config/Secrets.xcconfig
+          cd app
+          xcodegen generate
+      - name: Create and boot simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          RUNTIME=$(xcrun simctl list runtimes --json | jq -r \
+            '.runtimes | map(select(.isAvailable == true and (.name | startswith("iOS 27")))) | last | .identifier')
+          [ -n "$RUNTIME" ] && [ "$RUNTIME" != "null" ] || { echo "::error::No available iOS 27 runtime"; exit 1; }
+          DEVICE_TYPE=$(xcrun simctl list devicetypes --json | jq -r \
+            '.devicetypes | map(select(.name | startswith("iPhone"))) | last | .identifier')
+          UDID=$(xcrun simctl create "Pinkha Torah CI $GITHUB_RUN_ID" "$DEVICE_TYPE" "$RUNTIME")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+      - name: Unit, integration, and full UI suite
+        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult"
+      - name: Collect simulator crash logs
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/simulator-logs"
+          xcrun simctl spawn '${{ steps.simulator.outputs.udid }}' log show --last 20m --style compact \
+            --predicate 'process == "Pinkha" OR eventMessage CONTAINS "Pinkha"' \
+            > "$RUNNER_TEMP/simulator-logs/pinkha.log" 2>&1 || true
+      - name: Upload XCTest result and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinkha-torah-xcresult-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/PinkhaTests.xcresult
+            ${{ runner.temp }}/simulator-logs
+          if-no-files-found: warn
+      - name: Delete temporary simulator
+        if: always()
+        run: xcrun simctl delete '${{ steps.simulator.outputs.udid }}' || true
