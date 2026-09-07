@@ -145,16 +145,7 @@ public extension LeafView {
                 targetedDropBlockId = targeted ? b.id : (targetedDropBlockId == b.id ? nil : targetedDropBlockId)
             }
         }
-        .onDrop(of: [UTType.torahSource.identifier], isTargeted: { targeted in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                targetedDropBlockId = targeted ? b.id : (targetedDropBlockId == b.id ? nil : targetedDropBlockId)
-            }
-        }) { providers in
-            TorahSourceTransfer.decode(providers) { item in
-                insertTorahSourceTransfer(item, afterBlockId: b.id)
-            }
-            return true
-        }
+
         // contentShape + onTapGesture used to be unconditional, which
         // installed an HStack-level tap recogniser that swallowed taps
         // before they could reach inner controls (notably the Button

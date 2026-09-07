@@ -378,12 +378,7 @@ public struct LeafView: View {
                         insertTorahSourceTransfer(item, afterBlockId: nil)
                         return true
                     }
-                    .onDrop(of: [UTType.torahSource.identifier], isTargeted: nil) { providers in
-                        TorahSourceTransfer.decode(providers) { item in
-                            insertTorahSourceTransfer(item, afterBlockId: nil)
-                        }
-                        return true
-                    }
+
             }
         }
         .listStyle(.plain)
