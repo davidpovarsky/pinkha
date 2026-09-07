@@ -37,10 +37,13 @@ public struct SefariaReferenceProvider: ReferenceProvider {
         ])
         guard response.statusCode == 200 else { throw TorahError.network("Sefaria returned HTTP \(response.statusCode).") }
         guard let root = try jsonObject(data) as? [String: Any] else { throw TorahError.malformedResponse }
-        let values = (root["completion_objects"] as? [[String: Any]]) ?? (root["completions"] as? [String])?.map { ["title": $0] } ?? []
+        let values = root["completion_objects"] as? [[String: Any]] ?? []
         return values.compactMap { value in
-            guard let label = firstString(value, keys: ["title", "key", "ref", "label"]) else { return nil }
-            return ReferenceCandidate(id: label, label: label)
+            guard let key = value["key"] as? String,
+                  !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            let title = (value["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ReferenceCandidate(id: key, label: title?.isEmpty == false ? title! : key)
         }
     }
 

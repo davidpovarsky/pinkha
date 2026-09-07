@@ -4,11 +4,21 @@ public struct FixtureTorahProvider: ReferenceProvider, TopicProvider, LexicalPro
     public let providerID = "sefaria-fixture"
     public init() {}
     public func suggestReferences(query: String, limit: Int) async throws -> [ReferenceCandidate] {
-        query.isEmpty ? [] : [ReferenceCandidate(id: "Genesis 1:1", label: "בראשית א׳:א׳ — Genesis 1:1")]
+        guard !query.isEmpty else { return [] }
+        if query.contains("ראש") {
+            return [ReferenceCandidate(id: "Rosh Hashanah 16b", label: "ראש השנה ט״ז ב׳")]
+        }
+        return [ReferenceCandidate(id: "Genesis 1:1", label: "בראשית א׳:א׳ — Genesis 1:1")]
     }
     public func resolveReference(_ input: String) async throws -> ResolvedReference {
-        guard !input.localizedCaseInsensitiveContains("invalid") else { throw TorahError.invalidReference }
-        return ResolvedReference(canonical: "Genesis 1:1", labelHe: "בראשית א׳:א׳", labelEn: "Genesis 1:1", payload: #"{"ref":"Genesis 1:1","heRef":"בראשית א׳:א׳"}"#)
+        switch input {
+        case "Genesis 1:1":
+            return ResolvedReference(canonical: "Genesis 1:1", labelHe: "בראשית א׳:א׳", labelEn: "Genesis 1:1", payload: #"{"ref":"Genesis 1:1","heRef":"בראשית א׳:א׳"}"#)
+        case "Rosh Hashanah 16b":
+            return ResolvedReference(canonical: "Rosh Hashanah 16b", labelHe: "ראש השנה ט״ז ב׳", labelEn: "Rosh Hashanah 16b", payload: #"{"ref":"Rosh Hashanah 16b","heRef":"ראש השנה ט״ז ב׳"}"#)
+        default:
+            throw TorahError.invalidReference
+        }
     }
     public func suggestTopics(query: String, limit: Int) async throws -> [TopicCandidate] {
         query.isEmpty ? [] : [TopicCandidate(id: "prayer", labelHe: "תפילה", labelEn: "Prayer")]
