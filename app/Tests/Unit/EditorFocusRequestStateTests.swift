@@ -5,24 +5,33 @@ import PinkhaRichText
 struct EditorFocusRequestStateTests {
     @Test func trueIsConsumedOnlyOnceUntilFalse() {
         var state = EditorFocusRequestState()
-        #expect(state.consume(requested: true))
-        #expect(!state.consume(requested: true))
-        #expect(!state.consume(requested: false))
-        #expect(state.consume(requested: true))
+        let first = state.consume(requested: true)
+        let duplicate = state.consume(requested: true)
+        let reset = state.consume(requested: false)
+        let second = state.consume(requested: true)
+        #expect(first)
+        #expect(!duplicate)
+        #expect(!reset)
+        #expect(second)
     }
 
     @Test func nativeFocusPreventsBindingEchoFromBecomingARequest() {
         var state = EditorFocusRequestState()
         state.noteNativeFocus()
-        #expect(!state.consume(requested: true))
-        #expect(!state.consume(requested: true))
+        let echo = state.consume(requested: true)
+        let duplicate = state.consume(requested: true)
+        #expect(!echo)
+        #expect(!duplicate)
     }
 
     @Test func dismantlePermanentlyRejectsRequests() {
         var state = EditorFocusRequestState()
         state.dismantle()
-        #expect(!state.consume(requested: true))
-        #expect(!state.consume(requested: false))
-        #expect(!state.consume(requested: true))
+        let first = state.consume(requested: true)
+        let reset = state.consume(requested: false)
+        let second = state.consume(requested: true)
+        #expect(!first)
+        #expect(!reset)
+        #expect(!second)
     }
 }
