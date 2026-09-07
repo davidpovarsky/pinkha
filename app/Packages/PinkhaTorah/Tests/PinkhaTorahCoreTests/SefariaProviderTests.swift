@@ -251,3 +251,24 @@ struct SefariaProviderTests {
         #expect(results.first?.label == "בראשית")
     }
 }
+
+@Suite("Torah Inspector Coordinator")
+struct TorahInspectorCoordinatorTests {
+    @Test @MainActor func coordinatorInitializesWithoutSelection() {
+        let coordinator = TorahInspectorCoordinator()
+        #expect(coordinator.selection == nil)
+        #expect(!coordinator.isPresented)
+    }
+
+    @Test @MainActor func coordinatorOpensAndClosesSelection() {
+        let coordinator = TorahInspectorCoordinator()
+        let selection = TorahInspectorSelection(providerID: "sefaria", canonicalRef: "Genesis 22:3")
+        coordinator.open(selection)
+        #expect(coordinator.isPresented)
+        #expect(coordinator.selection?.canonicalRef == "Genesis 22:3")
+
+        coordinator.close()
+        #expect(!coordinator.isPresented)
+        #expect(coordinator.selection == nil)
+    }
+}

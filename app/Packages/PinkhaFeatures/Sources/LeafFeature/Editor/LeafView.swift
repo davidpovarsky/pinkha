@@ -49,23 +49,16 @@ public struct LeafView: View {
     @State var torahSearchKind: TorahAssociationKind?
     @State var torahPreviewRevision = 0
     @State var torahSourceQuotes: [String: TorahAssociation] = [:]
-    @State var torahInspectorSelection: TorahInspectorSelection?
-    @State var pendingTorahInspectorSelection: TorahInspectorSelection?
     @State var torahErrorMessage: String?
+    let onOpenTorahInspector: ((TorahInspectorSelection) -> Void)?
+    @Environment(TorahInspectorCoordinator.self) private var torahInspectorCoordinator: TorahInspectorCoordinator?
+    @State private var pendingInspectorRequest: TorahInspectorSelection?
 
-    func openTorahInspector(selection: TorahInspectorSelection) {
-        if torahTarget != nil || torahSearchKind != nil {
-            pendingTorahInspectorSelection = selection
-            torahTarget = nil
-            torahSearchKind = nil
-            return
-        }
-        Task { @MainActor in
-            guard torahTarget == nil, torahSearchKind == nil else {
-                pendingTorahInspectorSelection = selection
-                return
-            }
-            torahInspectorSelection = selection
+    func requestOpenTorahInspector(_ selection: TorahInspectorSelection) {
+        if let onOpenTorahInspector {
+            onOpenTorahInspector(selection)
+        } else if let torahInspectorCoordinator {
+            torahInspectorCoordinator.open(selection)
         }
     }
     @State var editMode: EditMode = .inactive
@@ -161,7 +154,8 @@ public struct LeafView: View {
     /// tab keeps its in-memory state).
     public init(vm: LeafViewModel,
          onDisappear: (() -> Void)? = nil,
-         scrollToBlockId: String? = nil) {
+         scrollToBlockId: String? = nil,
+         onOpenTorahInspector: ((TorahInspectorSelection) -> Void)? = nil) {
         let leafId = vm.leafId
         let lockKey = Self.lockKeyFor(leafId: leafId)
         let iconKey = Self.iconKeyFor(leafId: leafId)
@@ -172,6 +166,7 @@ public struct LeafView: View {
         self.iconKey = iconKey
         self.onDisappear = onDisappear
         self.scrollToBlockId = scrollToBlockId
+        self.onOpenTorahInspector = onOpenTorahInspector
     }
 
     public var body: some View {
@@ -250,17 +245,6 @@ public struct LeafView: View {
                 }
             }
         }
-        .inspector(isPresented: Binding(
-            get: { torahInspectorSelection != nil },
-            set: { if !$0 { torahInspectorSelection = nil } }
-        )) {
-            if let selection = torahInspectorSelection, let path = store.activeDatabasePath {
-                TorahInspectorView(databasePath: path, selection: selection)
-                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
-            } else {
-                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
-            }
-        }
     }
 
     // ── Main list ────────────────────────────────────────────────────────────
@@ -302,7 +286,12 @@ public struct LeafView: View {
                     databasePath: path,
                     target: .leaf(vm.leafId),
                     refreshToken: torahPreviewRevision,
-                    onOpenReference: { openTorahInspector(selection: $0) },
+                    onOpenReference: { selection in
+                        Task { @MainActor in
+                            await Task.yield()
+                            requestOpenTorahInspector(selection)
+                        }
+                    },
                     onManage: { torahTarget = .leaf(vm.leafId) }
                 )
                 .padding(.horizontal, 20)
@@ -685,14 +674,15 @@ public struct LeafView: View {
             await reloadTorahSourceQuotes()
         }
         .sheet(item: $torahTarget, onDismiss: {
-            if let pending = pendingTorahInspectorSelection {
-                pendingTorahInspectorSelection = nil
-                openTorahInspector(selection: pending)
+            if let pending = pendingInspectorRequest {
+                pendingInspectorRequest = nil
+                requestOpenTorahInspector(pending)
             }
         }) { target in
             if let path = store.activeDatabasePath {
-                TorahAssociationSheet(databasePath: path, target: target, onOpenReference: {
-                    openTorahInspector(selection: $0)
+                TorahAssociationSheet(databasePath: path, target: target, onOpenReference: { selection in
+                    pendingInspectorRequest = selection
+                    torahTarget = nil
                 }) {
                     torahPreviewRevision += 1
                 }
@@ -701,9 +691,9 @@ public struct LeafView: View {
             }
         }
         .sheet(item: $torahSearchKind, onDismiss: {
-            if let pending = pendingTorahInspectorSelection {
-                pendingTorahInspectorSelection = nil
-                openTorahInspector(selection: pending)
+            if let pending = pendingInspectorRequest {
+                pendingInspectorRequest = nil
+                requestOpenTorahInspector(pending)
             }
         }) { kind in
             if let path = store.activeDatabasePath {
@@ -950,7 +940,9 @@ public struct LeafView: View {
         // The destination view runs through `onAppear { vm.load() }`, so the
         // target leaf loads from SQLite without any extra plumbing.
         .navigationDestination(item: $pushedLeafId) { leafId in
-            LeafView(vm: tabManager.open(leafId: leafId, api: vm.api), onDisappear: nil)
+            LeafView(vm: tabManager.open(leafId: leafId, api: vm.api),
+                     onDisappear: nil,
+                     onOpenTorahInspector: onOpenTorahInspector)
                 // Mention-link pushes are editorial navigation — a Books-style
                 // crossfade reads better than a hard slide. The list-driven
                 // push in `LibraryView` keeps its zoom (Notes-style tile

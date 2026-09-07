@@ -101,7 +101,7 @@ public final class TorahInspectorModel {
 public struct TorahInspectorView: View {
     private let selection: TorahInspectorSelection
     @State private var model: TorahInspectorModel?
-    @State private var path: [TorahTextSegment] = []
+    @State private var activeSegment: TorahTextSegment?
 
     public init(databasePath: String, selection: TorahInspectorSelection) {
         self.selection = selection
@@ -111,18 +111,18 @@ public struct TorahInspectorView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             Group {
                 if let model { reader(model) }
                 else { ContentUnavailableView(l("Torah storage is unavailable."), systemImage: "exclamationmark.triangle") }
             }
             .navigationTitle(l("Source"))
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: TorahTextSegment.self) { segment in
+            .navigationDestination(item: $activeSegment) { segment in
                 if let model {
                     TorahSegmentDetailView(segment: segment, model: model) { linkedRef in
+                        activeSegment = nil
                         Task {
-                            if !path.isEmpty { path.removeAll() }
                             await model.open(.init(providerID: model.selection.providerID, canonicalRef: linkedRef))
                         }
                     }
@@ -130,7 +130,7 @@ public struct TorahInspectorView: View {
             }
         }
         .task(id: selection.id) {
-            if !path.isEmpty { path.removeAll() }
+            activeSegment = nil
             await model?.open(selection)
         }
     }
@@ -151,7 +151,7 @@ public struct TorahInspectorView: View {
                     ForEach(model.sections) { section in
                         Section {
                             ForEach(section.segments) { segment in
-                                Button { path.append(segment) } label: {
+                                Button { activeSegment = segment } label: {
                                     Text(segment.text)
                                         .font(.body)
                                         .multilineTextAlignment(.leading)

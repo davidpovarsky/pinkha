@@ -64,7 +64,9 @@ let package = Package(
                 .product(name: "PinkhaFFI",          package: "PinkhaFFI"),
                 .product(name: "PinkhaCore",         package: "PinkhaCore"),
                 .product(name: "PinkhaDesignSystem", package: "PinkhaDesignSystem"),
-                .product(name: "PinkhaComposer",     package: "PinkhaComposer")
+                .product(name: "PinkhaComposer",     package: "PinkhaComposer"),
+                .product(name: "PinkhaTorahCore",   package: "PinkhaTorah"),
+                .product(name: "PinkhaTorahUI",     package: "PinkhaTorah")
             ],
             path: "Sources/LibraryFeature"
         ),
