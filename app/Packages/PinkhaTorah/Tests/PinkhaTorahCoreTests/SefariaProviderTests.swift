@@ -89,6 +89,15 @@ struct SefariaProviderTests {
         await #expect(throws: TorahError.invalidReference) { try await SefariaReferenceProvider(client: SefariaClient(transport: missing)).resolveReference("invalid") }
     }
 
+    @Test func validReferenceDoesNotRequireOptionalURL() async throws {
+        let transport = MockTransport(payload: #"{"is_ref":true,"normalized":"Rosh Hashanah 16b","hebrew":"ראש השנה ט״ז ב׳"}"#)
+        let resolved = try await SefariaReferenceProvider(client: SefariaClient(transport: transport))
+            .resolveReference("Rosh Hashanah 16b")
+        #expect(resolved.canonical == "Rosh Hashanah 16b")
+        #expect(resolved.labelHe == "ראש השנה ט״ז ב׳")
+        #expect(resolved.urlRef == nil)
+    }
+
     @Test func normalizedResponseWinsOverCandidateKeyAndDisplayTitle() async throws {
         let completion = MockTransport(payload: #"{"completion_objects":[{"title":"ראש השנה ט״ז ב׳","key":"Rosh Hashanah 16B"}]}"#)
         let candidate = try await SefariaReferenceProvider(client: SefariaClient(transport: completion)).suggestReferences(query: "ראש", limit: 1)[0]
