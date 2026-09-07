@@ -8,10 +8,7 @@ RESULT="${2:-${TMPDIR:-/tmp}/PinkhaTorahTests.xcresult}"
 MODE="${3:-focused}"
 
 ONLY_TESTS=(
-  -only-testing:PinkhaTests/AttributedRoundTripTests
-  -only-testing:PinkhaTests/BlockReturnSemanticsTests
   -only-testing:PinkhaUITests/TorahAssociationsUITests
-  -only-testing:PinkhaUITests/BlockParagraphBreakUITests
 )
 if [ "$MODE" = "full" ]; then
   ONLY_TESTS=(

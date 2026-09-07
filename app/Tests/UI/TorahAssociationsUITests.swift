@@ -23,7 +23,7 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertTrue(search.waitForFocus(timeout: 3)); search.typeText(query)
         let row = app.buttons[resultIdentifier]
         XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
-        XCTAssertTrue(app.otherElements["torahAssociationSheet"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["torahAddAssociationButton"].waitForExistence(timeout: 5))
     }
 
     func testLeafAddsPersistsAndDeletesReferenceTopicAndWord() {

@@ -41,7 +41,7 @@ struct TorahStoreTests {
         try await store.add(TorahAssociation(target: block, kind: .ref, providerID: "sefaria", externalID: "Genesis 1:1", canonicalKey: "Genesis 1:1", labelHe: "בראשית א׳:א׳"))
         let leafValues = try await store.associations(for: leaf)
         #expect(leafValues.count == 3)
-        #expect(leafValues.first?.providerPayload == #"{"ref":1}"#)
+        #expect(leafValues.first(where: { $0.id == reference.id })?.providerPayload == #"{"ref":1}"#)
         #expect(try await store.associations(for: block).count == 1)
         try await store.remove(id: reference.id)
         #expect(try await store.associations(for: leaf).count == 2)
