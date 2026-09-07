@@ -12,6 +12,14 @@ private actor MockTransport: TorahHTTPTransport {
     }
 }
 
+private actor FailingTransport: TorahHTTPTransport {
+    let error: Error
+    init(error: Error) { self.error = error }
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        throw error
+    }
+}
+
 private struct AlternateProvider: ReferenceProvider {
     let providerID = "otzaria-test"
     func suggestReferences(query: String, limit: Int) async throws -> [ReferenceCandidate] { [] }
@@ -131,5 +139,115 @@ struct SefariaProviderTests {
         let values = try await provider.resolveWord(surface: "בשעריך", context: TorahLexicalContext(canonicalReference: "Deuteronomy 6:9"))
         #expect(values.count == 2); #expect(values.allSatisfy { $0.candidate.surface == "בשעריך" })
         #expect(Set(values.map { $0.candidate.lexicon }) == ["BDB", "Jastrow"])
+    }
+
+    @Test func cancelledURLErrorBecomesCancellationError() async throws {
+        let transport = FailingTransport(error: URLError(.cancelled))
+        let client = SefariaClient(transport: transport)
+        let provider = SefariaReferenceProvider(client: client)
+        await #expect(throws: CancellationError.self) {
+            _ = try await provider.suggestReferences(query: "בראשית", limit: 5)
+        }
+    }
+
+    @Test func nsURLErrorCancelledBecomesCancellationError() async throws {
+        let transport = FailingTransport(error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
+        let client = SefariaClient(transport: transport)
+        let provider = SefariaReferenceProvider(client: client)
+        await #expect(throws: CancellationError.self) {
+            _ = try await provider.suggestReferences(query: "בראשית", limit: 5)
+        }
+    }
+
+    @Test func genuineNetworkErrorRemainsTorahNetworkError() async throws {
+        let transport = FailingTransport(error: URLError(.notConnectedToInternet))
+        let client = SefariaClient(transport: transport)
+        let provider = SefariaReferenceProvider(client: client)
+        do {
+            _ = try await provider.suggestReferences(query: "בראשית", limit: 5)
+            Issue.record("Expected network error")
+        } catch let error as TorahError {
+            guard case .network = error else {
+                Issue.record("Expected TorahError.network, got \(error)")
+                return
+            }
+        } catch {
+            Issue.record("Expected TorahError, got \(error)")
+        }
+    }
+
+    @Test func exactSegmentRefIsSurfacedBeforeRootCompletion() async throws {
+        let payload = """
+        {
+          "is_ref": true,
+          "is_segment": true,
+          "is_section": false,
+          "is_book": false,
+          "ref": "Genesis 22:3",
+          "completion_objects": [
+            {"title": "בראשית", "key": "Genesis", "type": "ref"}
+          ]
+        }
+        """
+        let provider = SefariaReferenceProvider(client: SefariaClient(transport: MockTransport(payload: payload)))
+        let results = try await provider.suggestReferences(query: "בראשית כב ג", limit: 10)
+        #expect(results.count == 2)
+        #expect(results.first?.id == "Genesis 22:3")
+        #expect(results.first?.label == "בראשית כב ג")
+        #expect(results.last?.id == "Genesis")
+        #expect(results.last?.label == "בראשית")
+    }
+
+    @Test func exactSectionRefIsSurfaced() async throws {
+        let payload = """
+        {
+          "is_ref": true,
+          "is_section": true,
+          "is_book": false,
+          "ref": "Genesis 22",
+          "completion_objects": [
+            {"title": "בראשית", "key": "Genesis", "type": "ref"}
+          ]
+        }
+        """
+        let provider = SefariaReferenceProvider(client: SefariaClient(transport: MockTransport(payload: payload)))
+        let results = try await provider.suggestReferences(query: "Genesis 22", limit: 10)
+        #expect(results.count == 2)
+        #expect(results.first?.id == "Genesis 22")
+        #expect(results.first?.label == "Genesis 22")
+        #expect(results.last?.id == "Genesis")
+    }
+
+    @Test func unparsedRefFallsBackToOrdinaryCompletions() async throws {
+        let payload = """
+        {
+          "is_ref": false,
+          "completion_objects": [
+            {"title": "בראשית", "key": "Genesis", "type": "ref"}
+          ]
+        }
+        """
+        let provider = SefariaReferenceProvider(client: SefariaClient(transport: MockTransport(payload: payload)))
+        let results = try await provider.suggestReferences(query: "ברא", limit: 10)
+        #expect(results.count == 1)
+        #expect(results.first?.id == "Genesis")
+        #expect(results.first?.label == "בראשית")
+    }
+
+    @Test func duplicateParsedRefAndCompletionReturnsOnce() async throws {
+        let payload = """
+        {
+          "is_ref": true,
+          "ref": "Genesis",
+          "completion_objects": [
+            {"title": "בראשית", "key": "Genesis", "type": "ref"}
+          ]
+        }
+        """
+        let provider = SefariaReferenceProvider(client: SefariaClient(transport: MockTransport(payload: payload)))
+        let results = try await provider.suggestReferences(query: "בראשית", limit: 10)
+        #expect(results.count == 1)
+        #expect(results.first?.id == "Genesis")
+        #expect(results.first?.label == "בראשית")
     }
 }

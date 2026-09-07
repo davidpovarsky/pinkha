@@ -50,7 +50,24 @@ public struct LeafView: View {
     @State var torahPreviewRevision = 0
     @State var torahSourceQuotes: [String: TorahAssociation] = [:]
     @State var torahInspectorSelection: TorahInspectorSelection?
+    @State var pendingTorahInspectorSelection: TorahInspectorSelection?
     @State var torahErrorMessage: String?
+
+    func openTorahInspector(selection: TorahInspectorSelection) {
+        if torahTarget != nil || torahSearchKind != nil {
+            pendingTorahInspectorSelection = selection
+            torahTarget = nil
+            torahSearchKind = nil
+            return
+        }
+        Task { @MainActor in
+            guard torahTarget == nil, torahSearchKind == nil else {
+                pendingTorahInspectorSelection = selection
+                return
+            }
+            torahInspectorSelection = selection
+        }
+    }
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
     @State var titleFocusOffset: Int? = nil
@@ -233,6 +250,17 @@ public struct LeafView: View {
                 }
             }
         }
+        .inspector(isPresented: Binding(
+            get: { torahInspectorSelection != nil },
+            set: { if !$0 { torahInspectorSelection = nil } }
+        )) {
+            if let selection = torahInspectorSelection, let path = store.activeDatabasePath {
+                TorahInspectorView(databasePath: path, selection: selection)
+                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
     }
 
     // ── Main list ────────────────────────────────────────────────────────────
@@ -274,7 +302,7 @@ public struct LeafView: View {
                     databasePath: path,
                     target: .leaf(vm.leafId),
                     refreshToken: torahPreviewRevision,
-                    onOpenReference: { torahInspectorSelection = $0 },
+                    onOpenReference: { openTorahInspector(selection: $0) },
                     onManage: { torahTarget = .leaf(vm.leafId) }
                 )
                 .padding(.horizontal, 20)
@@ -656,11 +684,15 @@ public struct LeafView: View {
         .task(id: "\(vm.leafId):\(torahPreviewRevision)") {
             await reloadTorahSourceQuotes()
         }
-        .sheet(item: $torahTarget) { target in
+        .sheet(item: $torahTarget, onDismiss: {
+            if let pending = pendingTorahInspectorSelection {
+                pendingTorahInspectorSelection = nil
+                openTorahInspector(selection: pending)
+            }
+        }) { target in
             if let path = store.activeDatabasePath {
                 TorahAssociationSheet(databasePath: path, target: target, onOpenReference: {
-                    torahInspectorSelection = $0
-                    torahTarget = nil
+                    openTorahInspector(selection: $0)
                 }) {
                     torahPreviewRevision += 1
                 }
@@ -668,22 +700,16 @@ public struct LeafView: View {
                 ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
             }
         }
-        .sheet(item: $torahSearchKind) { kind in
+        .sheet(item: $torahSearchKind, onDismiss: {
+            if let pending = pendingTorahInspectorSelection {
+                pendingTorahInspectorSelection = nil
+                openTorahInspector(selection: pending)
+            }
+        }) { kind in
             if let path = store.activeDatabasePath {
                 TorahSearchSheet(databasePath: path, target: .leaf(vm.leafId), kind: kind) {
                     torahPreviewRevision += 1
                 }
-            } else {
-                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
-            }
-        }
-        .inspector(isPresented: Binding(
-            get: { torahInspectorSelection != nil },
-            set: { if !$0 { torahInspectorSelection = nil } }
-        )) {
-            if let selection = torahInspectorSelection, let path = store.activeDatabasePath {
-                TorahInspectorView(databasePath: path, selection: selection)
-                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
             } else {
                 ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
             }

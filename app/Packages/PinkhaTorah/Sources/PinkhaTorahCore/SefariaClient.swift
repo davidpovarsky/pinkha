@@ -3,6 +3,13 @@ import Foundation
 import FoundationNetworking
 #endif
 
+private func isCancellation(_ error: Error) -> Bool {
+    if error is CancellationError { return true }
+    if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+    let ns = error as NSError
+    return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+}
+
 public protocol TorahHTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
@@ -16,9 +23,14 @@ public struct URLSessionTorahTransport: TorahHTTPTransport {
         self.session = URLSession(configuration: configuration)
     }
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw TorahError.malformedResponse }
-        return (data, http)
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw TorahError.malformedResponse }
+            return (data, http)
+        } catch {
+            if isCancellation(error) { throw CancellationError() }
+            throw error
+        }
     }
 }
 
@@ -38,8 +50,10 @@ public struct SefariaClient: Sendable {
         var request = URLRequest(url: requestURL)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do { return try await transport.data(for: request) }
-        catch is CancellationError { throw CancellationError() }
-        catch let error as TorahError { throw error }
-        catch { throw TorahError.network(error.localizedDescription) }
+        catch {
+            if isCancellation(error) { throw CancellationError() }
+            if let error = error as? TorahError { throw error }
+            throw TorahError.network(error.localizedDescription)
+        }
     }
 }

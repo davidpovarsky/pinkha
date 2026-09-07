@@ -1,6 +1,7 @@
 import Testing
 import UIKit
 import PinkhaFFI
+import PinkhaTorahCore
 @testable import PinkhaRichText
 
 @MainActor
@@ -45,5 +46,16 @@ struct ReferenceCommandParserTests {
         #expect(parseReferenceCommand(text: cancelled, selection: NSRange(location: (cancelled as NSString).length, length: 0)) == .cancelled)
         #expect(parseReferenceCommand(text: "/Genesis 1", selection: NSRange(location: 4, length: 0)) == .inactive)
         #expect(parseReferenceCommand(text: "/Genesis 1", selection: NSRange(location: 2, length: 2)) == .inactive)
+    }
+
+    @Test func deepReferenceCandidateFlowsThroughCommandAdapter() {
+        let rawCandidates = [
+            ReferenceCandidate(id: "Genesis 22:3", label: "בראשית כב ג"),
+            ReferenceCandidate(id: "Genesis", label: "בראשית")
+        ]
+        let adapted = rawCandidates.map { ReferenceCommandCandidate(id: $0.id, title: $0.label) }
+        #expect(adapted.count == 2)
+        #expect(adapted.first?.id == "Genesis 22:3")
+        #expect(adapted.first?.title == "בראשית כב ג")
     }
 }

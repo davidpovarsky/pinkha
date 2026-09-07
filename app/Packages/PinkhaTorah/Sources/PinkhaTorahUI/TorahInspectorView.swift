@@ -121,12 +121,18 @@ public struct TorahInspectorView: View {
             .navigationDestination(for: TorahTextSegment.self) { segment in
                 if let model {
                     TorahSegmentDetailView(segment: segment, model: model) { linkedRef in
-                        Task { await model.open(.init(providerID: model.selection.providerID, canonicalRef: linkedRef)); path.removeAll() }
+                        Task {
+                            if !path.isEmpty { path.removeAll() }
+                            await model.open(.init(providerID: model.selection.providerID, canonicalRef: linkedRef))
+                        }
                     }
                 }
             }
         }
-        .task(id: selection.id) { await model?.open(selection) }
+        .task(id: selection.id) {
+            if !path.isEmpty { path.removeAll() }
+            await model?.open(selection)
+        }
     }
 
     @ViewBuilder private func reader(_ model: TorahInspectorModel) -> some View {

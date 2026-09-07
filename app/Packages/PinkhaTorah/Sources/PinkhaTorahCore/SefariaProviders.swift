@@ -35,20 +35,54 @@ public struct SefariaReferenceProvider: ReferenceProvider {
     public init(client: SefariaClient = SefariaClient()) { self.client = client }
 
     public func suggestReferences(query: String, limit: Int) async throws -> [ReferenceCandidate] {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
-        let (data, response) = try await client.get(pathSegments: ["api", "name", query], query: [
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return [] }
+        let (data, response) = try await client.get(pathSegments: ["api", "name", trimmedQuery], query: [
             URLQueryItem(name: "type", value: "ref"), URLQueryItem(name: "limit", value: String(limit))
         ])
         guard response.statusCode == 200 else { throw TorahError.network("Sefaria returned HTTP \(response.statusCode).") }
         guard let root = try jsonObject(data) as? [String: Any] else { throw TorahError.malformedResponse }
+
+        var candidates: [ReferenceCandidate] = []
+        var seenIDs = Set<String>()
+
+        func normalizeKey(_ key: String) -> String {
+            key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+
         let values = root["completion_objects"] as? [[String: Any]] ?? []
-        return values.compactMap { value in
+
+        // A. Exact parsed Ref candidate (from Sefaria Name API root metadata)
+        if root["is_ref"] as? Bool == true,
+           let exactRef = firstString(root, keys: ["ref", "normalized"]),
+           !exactRef.isEmpty {
+            let heLabel = firstString(root, keys: ["heRef", "hebrew", "he_ref", "hebrew_ref"])
+            let matchingCompletionTitle = values.first(where: {
+                guard let key = $0["key"] as? String else { return false }
+                return normalizeKey(key) == normalizeKey(exactRef)
+            }).flatMap { ($0["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let label = heLabel ?? (matchingCompletionTitle?.isEmpty == false ? matchingCompletionTitle! : trimmedQuery)
+            let candidate = ReferenceCandidate(id: exactRef, label: label)
+            candidates.append(candidate)
+            seenIDs.insert(normalizeKey(exactRef))
+        }
+
+        // B. Ordinary completion candidates (from completion_objects)
+        for value in values {
             guard let key = value["key"] as? String,
                   !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else { return nil }
-            let title = (value["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return ReferenceCandidate(id: key, label: title?.isEmpty == false ? title! : key)
+            else { continue }
+            let normalized = normalizeKey(key)
+            if seenIDs.insert(normalized).inserted {
+                let title = (value["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                candidates.append(ReferenceCandidate(id: key, label: title?.isEmpty == false ? title! : key))
+            }
         }
+
+        if limit > 0 {
+            return Array(candidates.prefix(limit))
+        }
+        return candidates
     }
 
     public func resolveReference(_ input: String) async throws -> ResolvedReference {

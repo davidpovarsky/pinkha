@@ -65,7 +65,7 @@ public extension LeafView {
                 vm.convertBlockContent(id: blockID, to: .quote(icon: "", text: [InlineTextFfi(content: snapshot, styles: [])]))
                 torahPreviewRevision += 1
                 await reloadTorahSourceQuotes()
-                torahInspectorSelection = .init(providerID: document.providerID, canonicalRef: document.canonicalRef)
+                openTorahInspector(selection: .init(providerID: document.providerID, canonicalRef: document.canonicalRef))
             } catch is CancellationError {} catch { torahErrorMessage = TorahStrings.message(for: error) }
         }
     }
@@ -322,7 +322,7 @@ public extension LeafView {
                 torahTarget = .block(leafID: vm.leafId, blockID: block.id)
             },
             sourceQuoteAssociation: torahSourceQuotes[block.id],
-            onOpenTorahReference: { torahInspectorSelection = $0 },
+            onOpenTorahReference: { openTorahInspector(selection: $0) },
             onReferenceCommandLookup: { query in
                 guard let path = store.activeDatabasePath,
                       let workspace = try? TorahWorkspace.application(databasePath: path) else { return [] }
