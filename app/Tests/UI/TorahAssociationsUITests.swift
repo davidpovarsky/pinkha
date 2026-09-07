@@ -19,9 +19,11 @@ final class TorahAssociationsUITests: XCTestCase {
     }
 
     private func openSearch(_ kind: String, app: XCUIApplication) {
-        let add = app.buttons.matching(identifier: "torahAddLinkButton")
-            .matching(NSPredicate(format: "isHittable == true")).firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 3)); add.tap()
+        let addButtons = app.buttons.matching(identifier: "torahAddLinkButton")
+        let add = addButtons.allElementsBoundByIndex.first(where: \.isHittable) ?? addButtons.firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+        XCTAssertTrue(add.isHittable)
+        add.tap()
         XCTAssertTrue(app.buttons["torahAssociationKindRef"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["torahAssociationKindWord"].exists)
         XCTAssertTrue(app.buttons["torahAssociationKindTopic"].exists)

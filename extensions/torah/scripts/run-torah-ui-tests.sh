@@ -6,6 +6,7 @@ cd "$ROOT"
 UDID="${1:?usage: run-torah-ui-tests.sh SIMULATOR_UDID [RESULT_PATH] [focused|full]}"
 RESULT="${2:-${TMPDIR:-/tmp}/PinkhaTorahTests.xcresult}"
 MODE="${3:-focused}"
+TEST_SELECTION="${4:-}"
 
 ONLY_TESTS=(
   -only-testing:PinkhaUITests/TorahAssociationsUITests
@@ -15,6 +16,10 @@ if [ "$MODE" = "full" ]; then
     -only-testing:PinkhaTests
     -only-testing:PinkhaIntegrationTests
     -only-testing:PinkhaUITests
+  )
+elif [ -n "$TEST_SELECTION" ]; then
+  ONLY_TESTS=(
+    "-only-testing:$TEST_SELECTION"
   )
 fi
 

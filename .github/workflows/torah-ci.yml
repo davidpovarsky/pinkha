@@ -17,11 +17,21 @@ on:
         required: false
         default: ""
         type: string
+      run_package_tests:
+        description: Run all PinkhaTorah Swift package tests
+        required: false
+        default: false
+        type: boolean
       run_ui_tests:
         description: Run the focused Torah UI tests for this dispatch
         required: false
         default: false
         type: boolean
+      ui_test_filter:
+        description: Optional only-testing selector for one focused iOS UI test
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: torah-ci-${{ github.ref }}
@@ -30,13 +40,13 @@ concurrency:
 jobs:
   core:
     name: Torah core and provider tests
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && (inputs.full_suite == true || inputs.run_package_tests == true || inputs.package_test_filter != '')
     runs-on: xcode-27
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - name: Swift package tests
-        if: inputs.package_test_filter == ''
+        if: inputs.package_test_filter == '' && (inputs.full_suite == true || inputs.run_package_tests == true)
         run: swift test --package-path app/Packages/PinkhaTorah
       - name: Focused Swift package test
         if: inputs.package_test_filter != ''
@@ -87,7 +97,9 @@ jobs:
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
       - name: Focused Torah association UI tests
         if: github.event_name != 'workflow_dispatch' || inputs.full_suite != true
-        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" focused
+        env:
+          UI_TEST_FILTER: ${{ inputs.ui_test_filter }}
+        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" focused "$UI_TEST_FILTER"
       - name: Final full unit, integration, and UI suite
         if: github.event_name == 'workflow_dispatch' && inputs.full_suite == true
         run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" full
