@@ -6,6 +6,12 @@ on:
   push:
     branches: [dev]
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: Run the complete existing unit, integration, and UI matrix
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: torah-ci-${{ github.ref }}
@@ -61,8 +67,12 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-      - name: Unit, integration, and full UI suite
-        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult"
+      - name: Focused Torah and editor tests
+        if: github.event_name != 'workflow_dispatch' || inputs.full_suite != true
+        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" focused
+      - name: Final full unit, integration, and UI suite
+        if: github.event_name == 'workflow_dispatch' && inputs.full_suite == true
+        run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" full
       - name: Collect simulator crash logs
         if: always()
         run: |
