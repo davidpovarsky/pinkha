@@ -47,9 +47,15 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["תפילה"].exists)
         XCTAssertTrue(app.staticTexts["בשעריך"].exists)
 
-        let topic = app.staticTexts["תפילה"]
-        topic.swipeLeft()
-        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); app.buttons["Delete"].tap()
+        let topic = app.staticTexts.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "torahAssociationRow.", "תפילה")
+        ).firstMatch
+        XCTAssertTrue(topic.waitForExistence(timeout: 3))
+        let swipeStart = topic.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        let swipeEnd = topic.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+        swipeStart.press(forDuration: 0.2, thenDragTo: swipeEnd)
+        let delete = app.buttons["torahDeleteAssociationButton"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 3)); delete.tap()
         XCTAssertFalse(app.staticTexts["תפילה"].waitForExistence(timeout: 1))
         app.buttons["Done"].tap(); app.buttons["torahLinksButton"].tap()
         XCTAssertFalse(app.staticTexts["תפילה"].exists)

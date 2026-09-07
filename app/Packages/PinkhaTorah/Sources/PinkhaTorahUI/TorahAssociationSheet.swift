@@ -25,9 +25,12 @@ public struct TorahAssociationSheet: View {
                             Text(association.labelHe)
                             Text(secondaryLabel(association)).font(.caption).foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                         .accessibilityIdentifier("torahAssociationRow.\(association.id)")
                         .swipeActions {
                             Button(l("Delete"), role: .destructive) { remove(association) }
+                                .accessibilityIdentifier("torahDeleteAssociationButton")
                         }
                     }
                 }

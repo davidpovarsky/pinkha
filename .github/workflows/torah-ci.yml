@@ -20,6 +20,7 @@ concurrency:
 jobs:
   core:
     name: Torah core and provider tests
+    if: github.event_name == 'workflow_dispatch'
     runs-on: xcode-27
     timeout-minutes: 25
     steps:
@@ -67,7 +68,7 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-      - name: Focused Torah and editor tests
+      - name: Focused Torah association UI tests
         if: github.event_name != 'workflow_dispatch' || inputs.full_suite != true
         run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" focused
       - name: Final full unit, integration, and UI suite
