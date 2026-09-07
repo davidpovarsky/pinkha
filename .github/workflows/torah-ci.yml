@@ -12,6 +12,16 @@ on:
         required: false
         default: false
         type: boolean
+      package_test_filter:
+        description: Optional Swift Testing filter for a focused package test
+        required: false
+        default: ""
+        type: string
+      run_ui_tests:
+        description: Run the focused Torah UI tests for this dispatch
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: torah-ci-${{ github.ref }}
@@ -26,10 +36,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Swift package tests
+        if: inputs.package_test_filter == ''
         run: swift test --package-path app/Packages/PinkhaTorah
+      - name: Focused Swift package test
+        if: inputs.package_test_filter != ''
+        env:
+          TEST_FILTER: ${{ inputs.package_test_filter }}
+        run: swift test --package-path app/Packages/PinkhaTorah --filter "$TEST_FILTER"
 
   simulator:
     name: Real iOS simulator XCUITest
+    if: github.event_name != 'workflow_dispatch' || inputs.run_ui_tests == true || inputs.full_suite == true
     runs-on: xcode-27
     timeout-minutes: 60
     steps:

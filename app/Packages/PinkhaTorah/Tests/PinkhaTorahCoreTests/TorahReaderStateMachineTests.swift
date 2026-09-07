@@ -99,7 +99,8 @@ struct TorahReaderStateMachineTests {
 
         // contentHeight = 1000, containerHeight = 400.
         // At offsetY = 450, distance to bottom is 1000 - 400 - 450 = 150 (<= 200 threshold)
-        _ = sm.onScrollOffsetChanged(offsetY: 400, contentHeight: 1000, containerHeight: 400, hasPrevious: true, hasNext: true)
+        // Stay just outside the trigger first, then cross it while scrolling down.
+        _ = sm.onScrollOffsetChanged(offsetY: 399, contentHeight: 1000, containerHeight: 400, hasPrevious: true, hasNext: true)
         let decision = sm.onScrollOffsetChanged(offsetY: 450, contentHeight: 1000, containerHeight: 400, hasPrevious: true, hasNext: true)
 
         #expect(decision.shouldLoadNext == true)
