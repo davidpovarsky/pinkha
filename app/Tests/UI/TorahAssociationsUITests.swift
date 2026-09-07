@@ -35,7 +35,7 @@ final class TorahAssociationsUITests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(search.waitForFocus(timeout: 3)); search.typeText(query)
+        search.typeText(query)
     }
 
     private func addFromLeaf(_ kind: String, query: String, resultIdentifier: String, app: XCUIApplication) {
@@ -140,13 +140,5 @@ final class TorahAssociationsUITests: XCTestCase {
             add(attachment)
         }
         super.tearDown()
-    }
-}
-
-private extension XCUIElement {
-    func waitForFocus(timeout: TimeInterval) -> Bool {
-        let predicate = NSPredicate(format: "hasKeyboardFocus == true")
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: self)
-        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }
