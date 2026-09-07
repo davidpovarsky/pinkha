@@ -46,6 +46,8 @@ public struct LeafView: View {
     @Environment(\.scenePhase) var scenePhase
     @State var showingBlockPicker = false
     @State var torahTarget: TorahTarget?
+    @State var torahSearchKind: TorahAssociationKind?
+    @State var torahPreviewRevision = 0
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
     @State var titleFocusOffset: Int? = nil
@@ -257,12 +259,24 @@ public struct LeafView: View {
                         recentEmojis = saveRecentEmoji(nouvelleIcone)
                     }
                 },
-                onTorahAssociations: readerMode.isActive ? nil : {
-                    torahTarget = .leaf(vm.leafId)
+                onTorahAdd: readerMode.isActive ? nil : { kind in
+                    torahSearchKind = kind
                 }
             )
             .listRowBackground(Color.clear).listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets()).moveDisabled(true).deleteDisabled(true)
+
+            if !readerMode.isActive, let path = store.activeDatabasePath {
+                TorahLeafAssociationsPreview(
+                    databasePath: path,
+                    target: .leaf(vm.leafId),
+                    refreshToken: torahPreviewRevision,
+                    onManage: { torahTarget = .leaf(vm.leafId) }
+                )
+                .padding(.horizontal, 20)
+                .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets()).moveDisabled(true).deleteDisabled(true)
+            }
 
             LeafTitleView(title: $vm.title, focusDemande: $focusTitle,
                               focusCursorOffset: $titleFocusOffset,
@@ -637,7 +651,18 @@ public struct LeafView: View {
         }
         .sheet(item: $torahTarget) { target in
             if let path = store.activeDatabasePath {
-                TorahAssociationSheet(databasePath: path, target: target)
+                TorahAssociationSheet(databasePath: path, target: target) {
+                    torahPreviewRevision += 1
+                }
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .sheet(item: $torahSearchKind) { kind in
+            if let path = store.activeDatabasePath {
+                TorahSearchSheet(databasePath: path, target: .leaf(vm.leafId), kind: kind) {
+                    torahPreviewRevision += 1
+                }
             } else {
                 ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
             }

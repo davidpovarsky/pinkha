@@ -1,6 +1,6 @@
 "Torah links" = "קישורים תורניים";
 "No Torah links" = "אין קישורים תורניים";
-"Add Torah link" = "הוספת קישור תורני";
+"Add Torah link" = "הוסף קישור תורני";
 "Source" = "מקור";
 "Topic" = "נושא";
 "Word" = "מילה";
@@ -14,3 +14,4 @@
 "Error" = "שגיאה";
 "OK" = "אישור";
 "Validate" = "אימות";
+"+%lld more" = "+%lld נוספים";

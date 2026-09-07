@@ -3,14 +3,16 @@ import SwiftUI
 
 public struct TorahAssociationSheet: View {
     private let target: TorahTarget
+    private let onMutation: () -> Void
     @State private var workspace: TorahWorkspace?
     @State private var associations: [TorahAssociation] = []
     @State private var presentedKind: TorahAssociationKind?
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
-    public init(databasePath: String, target: TorahTarget) {
+    public init(databasePath: String, target: TorahTarget, onMutation: @escaping () -> Void = {}) {
         self.target = target
+        self.onMutation = onMutation
         _workspace = State(initialValue: try? TorahWorkspace.application(databasePath: databasePath))
     }
 
@@ -40,12 +42,7 @@ public struct TorahAssociationSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(l("Done")) { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        kindButton(.ref, title: l("Source"), icon: "book.closed")
-                        kindButton(.topic, title: l("Topic"), icon: "tag")
-                        kindButton(.word, title: l("Word"), icon: "textformat")
-                    } label: { Label(l("Add Torah link"), systemImage: "plus") }
-                    .accessibilityIdentifier("torahAddAssociationButton")
+                    TorahAddLinkControl { presentedKind = $0 }
                 }
             }
             .task { await reload() }
@@ -54,15 +51,12 @@ public struct TorahAssociationSheet: View {
             } message: { Text(errorMessage ?? "") }
             .sheet(item: $presentedKind, onDismiss: { Task { await reload() } }) { kind in
                 if let workspace {
-                    TorahSearchPicker(kind: kind, target: target, workspace: workspace)
+                    TorahSearchSheet(workspace: workspace, target: target, kind: kind) {
+                        onMutation()
+                    }
                 }
             }
         }
-    }
-
-    private func kindButton(_ kind: TorahAssociationKind, title: String, icon: String) -> some View {
-        Button { presentedKind = kind } label: { Label(title, systemImage: icon) }
-            .accessibilityIdentifier("torahAssociationKind\(kind.rawValue.capitalized)")
     }
     private func secondaryLabel(_ value: TorahAssociation) -> String {
         let kind = switch value.kind { case .ref: l("Source"); case .topic: l("Topic"); case .word: l("Word") }
@@ -75,8 +69,37 @@ public struct TorahAssociationSheet: View {
         catch is CancellationError {} catch { errorMessage = error.localizedDescription }
     }
     private func remove(_ association: TorahAssociation) {
-        Task { do { try await workspace?.remove(associationID: association.id); await reload() }
+        Task { do { try await workspace?.remove(associationID: association.id); await reload(); onMutation() }
             catch { errorMessage = error.localizedDescription } }
+    }
+}
+
+public struct TorahSearchSheet: View {
+    let kind: TorahAssociationKind
+    let target: TorahTarget
+    let onSaved: () -> Void
+    @State private var workspace: TorahWorkspace?
+
+    public init(databasePath: String, target: TorahTarget, kind: TorahAssociationKind, onSaved: @escaping () -> Void = {}) {
+        self.kind = kind
+        self.target = target
+        self.onSaved = onSaved
+        _workspace = State(initialValue: try? TorahWorkspace.application(databasePath: databasePath))
+    }
+
+    init(workspace: TorahWorkspace, target: TorahTarget, kind: TorahAssociationKind, onSaved: @escaping () -> Void) {
+        self.kind = kind
+        self.target = target
+        self.onSaved = onSaved
+        _workspace = State(initialValue: workspace)
+    }
+
+    public var body: some View {
+        if let workspace {
+            TorahSearchPicker(kind: kind, target: target, workspace: workspace, onSaved: onSaved)
+        } else {
+            ContentUnavailableView(l("Torah storage is unavailable."), systemImage: "exclamationmark.triangle")
+        }
     }
 }
 
@@ -84,11 +107,13 @@ private struct TorahSearchPicker: View {
     let kind: TorahAssociationKind
     let target: TorahTarget
     let workspace: TorahWorkspace
+    let onSaved: () -> Void
     @State private var query = ""
     @State private var references: [ReferenceCandidate] = []
     @State private var topics: [TopicCandidate] = []
     @State private var words: [WordCandidate] = []
     @State private var searching = false
+    @State private var resolving = false
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
@@ -99,7 +124,8 @@ private struct TorahSearchPicker: View {
                 switch kind {
                 case .ref:
                     ForEach(references) { value in
-                        Button(value.label) { saveReference(value.id) }
+                        Button(value.label) { saveReference(value) }
+                            .disabled(resolving)
                             .accessibilityIdentifier("torahReferenceResult.\(value.id)")
                     }
                 case .topic:
@@ -107,6 +133,7 @@ private struct TorahSearchPicker: View {
                         Button { saveTopic(value.id) } label: {
                             VStack(alignment: .leading) { Text(value.labelHe); if let en = value.labelEn { Text(en).font(.caption).foregroundStyle(.secondary) } }
                         }
+                        .disabled(resolving)
                         .accessibilityIdentifier("torahTopicResult.\(value.id)")
                     }
                 case .word:
@@ -117,6 +144,7 @@ private struct TorahSearchPicker: View {
                                 Text([value.lexicon, value.description].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .disabled(resolving)
                         .accessibilityIdentifier("torahWordResult.\(value.id)")
                     }
                 }
@@ -130,19 +158,16 @@ private struct TorahSearchPicker: View {
             .task { if kind == .topic { try? await workspace.refreshTopicIndexIfNeeded() } }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(l("Cancel")) { dismiss() } }
-                if kind == .ref && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(l("Validate")) { saveReference(query) }
-                    }
-                }
             }
             .alert(l("Error"), isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Button(l("OK"), role: .cancel) {}
             } message: { Text(errorMessage ?? "") }
         }
-        .accessibilityIdentifier("torah\(kind.rawValue.capitalized)Picker")
+        .overlay { if resolving { ProgressView().controlSize(.small) } }
+        .accessibilityIdentifier(searchSheetIdentifier)
     }
 
+    private var searchSheetIdentifier: String { "torah\(kind.rawValue.capitalized)SearchSheet" }
     private var title: String { switch kind { case .ref: l("Source"); case .topic: l("Topic"); case .word: l("Word") } }
     private var prompt: String { switch kind { case .ref: l("Search references"); case .topic: l("Search topics"); case .word: l("Search words") } }
     private func search() async {
@@ -159,9 +184,23 @@ private struct TorahSearchPicker: View {
             }
         } catch is CancellationError {} catch { errorMessage = error.localizedDescription }
     }
-    private func saveReference(_ input: String) { Task { do { let value = try await workspace.resolveReference(input); try await workspace.addReference(value, rawInput: query, to: target); dismiss() } catch { errorMessage = error.localizedDescription } } }
-    private func saveTopic(_ id: String) { Task { do { let value = try await workspace.resolveTopic(id); try await workspace.addTopic(value, to: target); dismiss() } catch { errorMessage = error.localizedDescription } } }
-    private func saveWord(_ value: WordCandidate) { Task { do { try await workspace.addWord(ResolvedWord(candidate: value), to: target); dismiss() } catch { errorMessage = error.localizedDescription } } }
+    private func saveReference(_ candidate: ReferenceCandidate) { save { let value = try await workspace.resolveReference(candidate.id); try await workspace.addReference(value, rawInput: query, to: target) } }
+    private func saveTopic(_ id: String) { save { let value = try await workspace.resolveTopic(id); try await workspace.addTopic(value, to: target) } }
+    private func saveWord(_ value: WordCandidate) { save { try await workspace.addWord(ResolvedWord(candidate: value), to: target) } }
+    private func save(_ operation: @escaping @MainActor () async throws -> Void) {
+        guard !resolving else { return }
+        resolving = true
+        Task {
+            do {
+                try await operation()
+                onSaved()
+                dismiss()
+            } catch {
+                resolving = false
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 }
 
-private func l(_ key: String.LocalizationValue) -> String { String(localized: key, bundle: .module) }
+func l(_ key: String.LocalizationValue) -> String { String(localized: key, bundle: .module) }
