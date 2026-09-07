@@ -105,9 +105,9 @@ public struct TorahSourceReaderView: View {
             }
         }
         .navigationTitle(displayTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .torahInlineNavigationTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .foregroundStyle(.secondary)
@@ -127,40 +127,48 @@ public struct TorahSourceReaderView: View {
     @ViewBuilder
     private var readerContent: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    if loadingPrevious {
-                        ProgressView().frame(maxWidth: .infinity)
+            if #available(macOS 15.0, *) {
+                readerScrollView
+                    .onScrollGeometryChange(for: ScrollOffsetInfo.self) { geometry in
+                        ScrollOffsetInfo(
+                            offsetY: geometry.contentOffset.y,
+                            contentHeight: geometry.contentSize.height,
+                            containerHeight: geometry.containerSize.height
+                        )
+                    } action: { _, newValue in
+                        handleScrollChange(newValue, proxy: proxy)
                     }
+            } else {
+                readerScrollView
+            }
+        }
+    }
 
-                    ForEach(sections) { section in
-                        Section {
-                            ForEach(section.segments) { segment in
-                                segmentRow(segment, in: section)
-                                    .id(segment.id)
-                            }
-                        } header: {
-                            Text(section.hebrewSectionRef ?? section.sectionRef)
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
+    private var readerScrollView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                if loadingPrevious {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.segments) { segment in
+                            segmentRow(segment, in: section)
+                                .id(segment.id)
                         }
-                    }
-
-                    if loadingNext {
-                        ProgressView().frame(maxWidth: .infinity)
+                    } header: {
+                        Text(section.hebrewSectionRef ?? section.sectionRef)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding()
+
+                if loadingNext {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
             }
-            .onScrollGeometryChange(for: ScrollOffsetInfo.self) { geometry in
-                ScrollOffsetInfo(
-                    offsetY: geometry.contentOffset.y,
-                    contentHeight: geometry.contentSize.height,
-                    containerHeight: geometry.containerSize.height
-                )
-            } action: { _, newValue in
-                handleScrollChange(newValue, proxy: proxy)
-            }
+            .padding()
         }
     }
 
@@ -191,7 +199,7 @@ public struct TorahSourceReaderView: View {
                 Label(TorahStrings.insertIntoDocument, systemImage: "arrow.down.doc")
             }
             Button {
-                UIPasteboard.general.string = segment.text
+                TorahPlatformClipboard.copy(segment.text)
             } label: {
                 Label(TorahStrings.copy, systemImage: "doc.on.doc")
             }

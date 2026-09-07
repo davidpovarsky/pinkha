@@ -57,7 +57,7 @@ public struct TorahSegmentDetailView: View {
                         .buttonStyle(.borderedProminent)
 
                         Button {
-                            UIPasteboard.general.string = segment.text
+                            TorahPlatformClipboard.copy(segment.text)
                         } label: {
                             Label(TorahStrings.copy, systemImage: "doc.on.doc")
                                 .font(.subheadline)
@@ -101,9 +101,9 @@ public struct TorahSegmentDetailView: View {
             }
         }
         .navigationTitle(segment.hebrewRef ?? segment.canonicalRef)
-        .navigationBarTitleDisplayMode(.inline)
+        .torahInlineNavigationTitle()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .foregroundStyle(.secondary)
