@@ -148,6 +148,24 @@ public struct TorahTextVersionMetadata: Hashable, Codable, Sendable {
     public let versionTitleInHebrew: String?
     public let license: String?
     public let direction: String?
+
+    public init(
+        language: String,
+        actualLanguage: String? = nil,
+        languageFamilyName: String? = nil,
+        versionTitle: String,
+        versionTitleInHebrew: String? = nil,
+        license: String? = nil,
+        direction: String? = nil
+    ) {
+        self.language = language
+        self.actualLanguage = actualLanguage
+        self.languageFamilyName = languageFamilyName
+        self.versionTitle = versionTitle
+        self.versionTitleInHebrew = versionTitleInHebrew
+        self.license = license
+        self.direction = direction
+    }
 }
 
 public struct TorahTextSegment: Identifiable, Hashable, Codable, Sendable {
@@ -175,6 +193,32 @@ public struct TorahTextDocument: Identifiable, Hashable, Codable, Sendable {
     public let nextSectionRef: String?
     public let version: TorahTextVersionMetadata
     public let rawProviderPayload: String
+
+    public init(
+        providerID: String,
+        requestedRef: String,
+        canonicalRef: String,
+        hebrewRef: String? = nil,
+        sectionRef: String,
+        hebrewSectionRef: String? = nil,
+        segments: [TorahTextSegment],
+        previousSectionRef: String? = nil,
+        nextSectionRef: String? = nil,
+        version: TorahTextVersionMetadata,
+        rawProviderPayload: String = "{}"
+    ) {
+        self.providerID = providerID
+        self.requestedRef = requestedRef
+        self.canonicalRef = canonicalRef
+        self.hebrewRef = hebrewRef
+        self.sectionRef = sectionRef
+        self.hebrewSectionRef = hebrewSectionRef
+        self.segments = segments
+        self.previousSectionRef = previousSectionRef
+        self.nextSectionRef = nextSectionRef
+        self.version = version
+        self.rawProviderPayload = rawProviderPayload
+    }
 }
 
 public struct TorahLinkedSource: Identifiable, Hashable, Codable, Sendable {

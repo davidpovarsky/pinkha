@@ -103,14 +103,14 @@ public extension LeafViewModel {
                         ordinal: 1
                     )
                 ],
-                previousSectionRef: nil,
-                nextSectionRef: nil,
+                previousSectionRef: nil as String?,
+                nextSectionRef: nil as String?,
                 version: TorahTextVersionMetadata(
                     language: "he",
                     actualLanguage: "he",
                     languageFamilyName: "hebrew",
                     versionTitle: transfer.versionTitle ?? "",
-                    versionTitleInHebrew: nil,
+                    versionTitleInHebrew: nil as String?,
                     license: transfer.license,
                     direction: "rtl"
                 ),
