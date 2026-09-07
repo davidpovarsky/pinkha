@@ -19,7 +19,9 @@ final class TorahAssociationsUITests: XCTestCase {
     }
 
     private func openSearch(_ kind: String, app: XCUIApplication) {
-        app.buttons["torahAddLinkButton"].tap()
+        let add = app.buttons.matching(identifier: "torahAddLinkButton")
+            .matching(NSPredicate(format: "isHittable == true")).firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 3)); add.tap()
         XCTAssertTrue(app.descendants(matching: .any)["torahAddKindPopover"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["torahAssociationKindRef"].exists)
         XCTAssertTrue(app.buttons["torahAssociationKindWord"].exists)
@@ -80,7 +82,9 @@ final class TorahAssociationsUITests: XCTestCase {
             NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "torahAssociationRow.", "תפילה")
         ).firstMatch
         XCTAssertTrue(topic.waitForExistence(timeout: 3))
-        topic.swipeLeft()
+        let swipeStart = topic.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        let swipeEnd = topic.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+        swipeStart.press(forDuration: 0.2, thenDragTo: swipeEnd)
         let delete = app.buttons["torahDeleteAssociationButton"]
         XCTAssertTrue(delete.waitForExistence(timeout: 3)); delete.tap()
         XCTAssertFalse(app.staticTexts["תפילה"].waitForExistence(timeout: 1))
