@@ -2,6 +2,16 @@
 "No Torah links" = "אין קישורים תורניים";
 "Add Torah link" = "הוסף קישור תורני";
 "Source" = "מקור";
+"Open in Inspector" = "פתח בחלונית המקורות";
+"Choose a more specific source." = "יש לבחור מקור ממוקד יותר.";
+"No text available" = "אין טקסט זמין";
+"No text is available for this source." = "אין טקסט זמין למקור זה.";
+"Commentary" = "פרשנות";
+"Linked sources" = "מקורות מקושרים";
+"Topics" = "נושאים";
+"Retry" = "נסה שוב";
+"No results" = "אין תוצאות";
+"The reference is not valid." = "המקור אינו תקין.";
 "Topic" = "נושא";
 "Word" = "מילה";
 "Search references" = "חיפוש מקורות";

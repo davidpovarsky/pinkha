@@ -27,6 +27,49 @@ private struct SelectionTapModifier: ViewModifier {
 
 public extension LeafView {
 
+    func reloadTorahSourceQuotes() async {
+        guard let path = store.activeDatabasePath,
+              let workspace = try? TorahWorkspace.application(databasePath: path) else {
+            torahSourceQuotes = [:]; return
+        }
+        do {
+            let values = try await workspace.associations(forLeafID: vm.leafId)
+            var sourceQuotes: [String: TorahAssociation] = [:]
+            for association in values {
+                guard association.kind == .ref, association.role == .sourceQuote,
+                      case .block(_, let blockID) = association.target else { continue }
+                sourceQuotes[blockID] = association
+            }
+            torahSourceQuotes = sourceQuotes
+        } catch is CancellationError {} catch { torahErrorMessage = error.localizedDescription }
+    }
+
+    func insertTorahSourceQuote(candidate: ReferenceCommandCandidate, blockID: String) {
+        guard let path = store.activeDatabasePath else { torahErrorMessage = TorahStrings.storageUnavailable; return }
+        Task { @MainActor in
+            do {
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                let workspace = try TorahWorkspace.application(databasePath: path)
+                let resolved = try await workspace.resolveReference(candidate.id)
+                guard resolved.isEmbeddableSource else { throw TorahError.referenceTooBroad }
+                let document = try await workspace.fetchText(reference: resolved.canonical)
+                let maximumSourceSegments = 200
+                let maximumSourceCharacters = 100_000
+                guard document.segments.count <= maximumSourceSegments,
+                      document.segments.reduce(0, { $0 + $1.text.count }) <= maximumSourceCharacters
+                else { throw TorahError.referenceTooBroad }
+                let target = TorahTarget.block(leafID: vm.leafId, blockID: blockID)
+                try await workspace.addSourceQuote(resolved, document: document, rawInput: candidate.title, to: target)
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                let snapshot = document.segments.map(\.text).joined(separator: pinkhaParagraphSeparator)
+                vm.convertBlockContent(id: blockID, to: .quote(icon: "", text: [InlineTextFfi(content: snapshot, styles: [])]))
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+                torahInspectorSelection = .init(providerID: document.providerID, canonicalRef: document.canonicalRef)
+            } catch is CancellationError {} catch { torahErrorMessage = TorahStrings.message(for: error) }
+        }
+    }
+
     /// Builds the full row for a block in the List: selection HStack + content + gestures.
     @ViewBuilder
     func blockListRow(_ block: Binding<EditableBlock>) -> some View {
@@ -277,6 +320,19 @@ public extension LeafView {
             onDuplicate: { vm.duplicateBlock(id: block.id) },
             onTorahAssociations: vm.locked || readerMode.isActive ? nil : {
                 torahTarget = .block(leafID: vm.leafId, blockID: block.id)
+            },
+            sourceQuoteAssociation: torahSourceQuotes[block.id],
+            onOpenTorahReference: { torahInspectorSelection = $0 },
+            onReferenceCommandLookup: { query in
+                guard let path = store.activeDatabasePath,
+                      let workspace = try? TorahWorkspace.application(databasePath: path) else { return [] }
+                do {
+                    return try await workspace.suggestReferences(query).map { .init(id: $0.id, title: $0.label) }
+                } catch is CancellationError { return [] }
+                catch { return [] }
+            },
+            onReferenceCommandPick: { candidate in
+                insertTorahSourceQuote(candidate: candidate, blockID: block.id)
             },
             accentColor: effectiveAccentColor,
             themeForegroundColor: effectiveTheme.effectiveForegroundColor(darkVariant: effectiveThemeDarkVariant),

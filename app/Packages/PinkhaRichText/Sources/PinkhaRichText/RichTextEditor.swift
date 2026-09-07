@@ -20,6 +20,12 @@ public struct MentionCandidate {
     }
 }
 
+public struct ReferenceCommandCandidate: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public init(id: String, title: String) { self.id = id; self.title = title }
+}
+
 public struct RichTextEditor: UIViewRepresentable {
     public typealias Coordinator = RichTextEditorCoordinator
 
@@ -108,6 +114,8 @@ public struct RichTextEditor: UIViewRepresentable {
     /// (`feat: 2-pass Notion mention rewrite`) are the main producer of
     /// these URLs.
     var onOpenInternalLeaf: ((String) -> Void)? = nil
+    var onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil
+    var onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
 
     public init(
         spans: Binding<[InlineTextFfi]>,
@@ -141,7 +149,9 @@ public struct RichTextEditor: UIViewRepresentable {
         themeForegroundColor: UIColor? = nil,
         keyboardAppearance: UIKeyboardAppearance = .default,
         onMentionLookup: (() -> [MentionCandidate])? = nil,
-        onOpenInternalLeaf: ((String) -> Void)? = nil
+        onOpenInternalLeaf: ((String) -> Void)? = nil,
+        onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil,
+        onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
     ) {
         self._spans = spans
         self._isFocused = isFocused
@@ -175,6 +185,8 @@ public struct RichTextEditor: UIViewRepresentable {
         self.keyboardAppearance = keyboardAppearance
         self.onMentionLookup = onMentionLookup
         self.onOpenInternalLeaf = onOpenInternalLeaf
+        self.onReferenceCommandLookup = onReferenceCommandLookup
+        self.onReferenceCommandPick = onReferenceCommandPick
     }
 
     public func makeUIView(context: Context) -> ExpandingTextView {

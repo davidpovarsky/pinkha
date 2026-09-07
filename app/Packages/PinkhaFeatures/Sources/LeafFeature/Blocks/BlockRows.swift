@@ -1,5 +1,6 @@
 import SwiftUI
 import PinkhaTorahUI
+import PinkhaTorahCore
 import PinkhaCore
 import PinkhaFFI
 import PinkhaRichText
@@ -92,6 +93,10 @@ public struct BlockCallbacks {
     public var onDuplicate: (() -> Void)? = nil
     /// Opens the shared provider-neutral association editor for this block.
     public var onTorahAssociations: (() -> Void)? = nil
+    public var sourceQuoteAssociation: TorahAssociation? = nil
+    public var onOpenTorahReference: ((TorahInspectorSelection) -> Void)? = nil
+    public var onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil
+    public var onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
     /// Accent color the row should paint its accented affordances with
     /// (todo checkmark, etc.). Resolved at the LeafView level so a
     /// per-doc accent overrides the global setting; the default falls
@@ -169,7 +174,9 @@ public struct BlockTextEditor: View {
             themeForegroundColor: cb.themeForegroundColor.map(UIColor.init),
             keyboardAppearance: cb.keyboardAppearance,
             onMentionLookup: cb.onMentionLookup,
-            onOpenInternalLeaf: cb.onOpenInternalLeaf)
+            onOpenInternalLeaf: cb.onOpenInternalLeaf,
+            onReferenceCommandLookup: cb.onReferenceCommandLookup,
+            onReferenceCommandPick: cb.onReferenceCommandPick)
         .autoFocusIfNeeded(blockId: block.id, autoFocusId: $autoFocusId,
                               autoFocusOffset: $autoFocusOffset, cursorAt: $cursorAt, focused: $focused)
         .onChange(of: focused) { _, f in if f { cb.onFocus?() } }
@@ -242,7 +249,9 @@ public struct BlockRowView: View {
             case .heading(let level, _):
                 HeadingRowView(block: $block, level: level, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset, cb: cb)
             case .quote(let icon, _):
-                if icon.isEmpty {
+                if icon.isEmpty, let association = cb.sourceQuoteAssociation, let onOpen = cb.onOpenTorahReference {
+                    TorahSourceQuoteView(association: association, text: block.spans.map(\.content).joined(), onOpen: onOpen)
+                } else if icon.isEmpty {
                     QuoteRowView(block: $block, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset, cb: cb)
                 } else {
                     CalloutRowView(block: $block, icon: icon, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset, cb: cb)

@@ -49,12 +49,13 @@ struct SefariaProviderTests {
         let completionTransport = MockTransport(payload: #"{"completion_objects":[{"title":"ראש השנה ט״ז ב׳","key":"Rosh Hashanah 16b","type":"ref"}]}"#)
         let candidates = try await SefariaReferenceProvider(client: SefariaClient(transport: completionTransport))
             .suggestReferences(query: "ראש הש", limit: 12)
-        let resolutionTransport = MockTransport(payload: #"{"is_ref":true,"ref":"Rosh Hashanah 16b","heRef":"ראש השנה ט״ז ב׳"}"#)
+        let resolutionTransport = MockTransport(payload: #"{"is_ref":true,"normalized":"Rosh Hashanah 16b","hebrew":"ראש השנה ט״ז ב׳","url_ref":"Rosh_Hashanah.16b"}"#)
         let provider = SefariaReferenceProvider(client: SefariaClient(transport: resolutionTransport))
 
         let resolved = try await provider.resolveReference(candidates[0].id)
 
         #expect(resolved.canonical == "Rosh Hashanah 16b")
+        #expect(resolved.urlRef == "Rosh_Hashanah.16b")
         let url = await resolutionTransport.lastURL?.absoluteString ?? ""
         #expect(url.contains("Rosh%20Hashanah%2016b"))
         #expect(!url.contains("%D7%A8%D7%90%D7%A9"))
@@ -71,13 +72,57 @@ struct SefariaProviderTests {
     }
 
     @Test func referenceValidationAcceptsCanonicalAndRejectsInvalidShapes() async throws {
-        let valid = MockTransport(payload: #"{"is_ref":true,"ref":"Genesis 1:1","heRef":"בראשית א׳:א׳"}"#)
+        let valid = MockTransport(payload: #"{"is_ref":true,"normalized":"Genesis 1:1","hebrew":"בראשית א׳:א׳","url_ref":"Genesis.1.1"}"#)
         let resolved = try await SefariaReferenceProvider(client: SefariaClient(transport: valid)).resolveReference("בראשית א:א")
         #expect(resolved.canonical == "Genesis 1:1")
         let invalid = MockTransport(payload: #"{"is_ref":false}"#)
         await #expect(throws: TorahError.invalidReference) { try await SefariaReferenceProvider(client: SefariaClient(transport: invalid)).resolveReference("invalid") }
         let missing = MockTransport(status: 404, payload: #"{"error":"not found"}"#)
         await #expect(throws: TorahError.invalidReference) { try await SefariaReferenceProvider(client: SefariaClient(transport: missing)).resolveReference("invalid") }
+    }
+
+    @Test func normalizedResponseWinsOverCandidateKeyAndDisplayTitle() async throws {
+        let completion = MockTransport(payload: #"{"completion_objects":[{"title":"ראש השנה ט״ז ב׳","key":"Rosh Hashanah 16B"}]}"#)
+        let candidate = try await SefariaReferenceProvider(client: SefariaClient(transport: completion)).suggestReferences(query: "ראש", limit: 1)[0]
+        let resolution = MockTransport(payload: #"{"is_ref":true,"normalized":"Rosh Hashanah 16b","hebrew":"ראש השנה ט״ז ב׳","url_ref":"Rosh_Hashanah.16b"}"#)
+        let resolved = try await SefariaReferenceProvider(client: SefariaClient(transport: resolution)).resolveReference(candidate.id)
+        #expect(candidate.label != candidate.id)
+        #expect(candidate.id != resolved.canonical)
+        #expect(resolved.canonical == "Rosh Hashanah 16b")
+    }
+
+    @Test func textsV3DecodesSectionSegmentsNavigationAndProvenance() throws {
+        let root: [String: Any] = [
+            "ref": "Genesis 1", "heRef": "בראשית א׳", "sectionRef": "Genesis 1", "heSectionRef": "בראשית א׳",
+            "versions": [["language": "he", "actualLanguage": "he", "languageFamilyName": "hebrew", "versionTitle": "Test Hebrew", "versionTitleInHebrew": "נוסח בדיקה", "license": "CC-BY", "direction": "rtl", "text": ["א", "ב", "ג"]]]
+        ]
+        let metadata: [String: Any] = ["is_ref": true, "depth": 2, "start_indexes": [0], "navigation_refs": ["prev_section_ref": "Genesis 0", "next_section_ref": "Genesis 2"]]
+        let value = try SefariaTextProvider.decode(reference: "Genesis 1", root: root, metadata: metadata)
+        #expect(value.segments.map(\.canonicalRef) == ["Genesis 1:1", "Genesis 1:2", "Genesis 1:3"])
+        #expect(value.previousSectionRef == "Genesis 0"); #expect(value.nextSectionRef == "Genesis 2")
+        #expect(value.version.versionTitle == "Test Hebrew"); #expect(value.version.license == "CC-BY")
+    }
+
+    @Test func textsV3DecodesTalmudPageAndExactSegment() throws {
+        let page: [String: Any] = ["ref": "Berakhot 2a", "sectionRef": "Berakhot 2a", "versions": [["language": "he", "versionTitle": "Vilna", "text": ["א", "ב"]]]]
+        let pageMeta: [String: Any] = ["depth": 2, "start_indexes": [1], "navigation_refs": ["next_section_ref": "Berakhot 2b"]]
+        #expect(try SefariaTextProvider.decode(reference: "Berakhot 2a", root: page, metadata: pageMeta).segments.map(\.canonicalRef) == ["Berakhot 2a:1", "Berakhot 2a:2"])
+        let segment: [String: Any] = ["ref": "Genesis 1:7", "heRef": "בראשית א׳:ז׳", "sectionRef": "Genesis 1", "versions": [["language": "he", "versionTitle": "Test", "text": "פסוק"]]]
+        let segmentMeta: [String: Any] = ["depth": 2, "start_indexes": [0, 6], "navigation_refs": [:]]
+        #expect(try SefariaTextProvider.decode(reference: "Genesis 1:7", root: segment, metadata: segmentMeta).segments[0].canonicalRef == "Genesis 1:7")
+    }
+
+    @Test func linksAndTopicsPreserveRelationshipKinds() async throws {
+        let linksPayload = #"[{"sourceRef":"Rashi on Genesis 1:1:1","sourceHeRef":"רש״י","category":"Commentary","type":"commentary","collectiveTitle":{"en":"Rashi","he":"רש״י"},"he":"פירוש","heVersionTitle":"מקראות","heLicense":"CC-BY-SA"},{"sourceRef":"Midrash Rabbah 1:1","category":"Midrash","type":"midrash","he":"מדרש"}]"#
+        let links = try await SefariaRelationshipProvider(client: SefariaClient(transport: MockTransport(payload: linksPayload))).links(for: "Genesis 1:1")
+        #expect(links[0].category == "Commentary"); #expect(links[0].hebrewCollectiveTitle == "רש״י")
+        #expect(links[1].category == "Midrash")
+        let topicsPayload = #"[{"topic":"creation","descriptions":{"en":{"title":"Creation"},"he":{"title":"בריאה"}}},{"topic":"creation"}]"#
+        let transport = MockTransport(payload: topicsPayload)
+        let topics = try await SefariaRelationshipProvider(client: SefariaClient(transport: transport)).topics(for: "Genesis 1:1")
+        #expect(topics.count == 1); #expect(topics[0].slug == "creation"); #expect(topics[0].titleHe == "בריאה")
+        let topicsURL = await transport.lastURL?.absoluteString ?? ""
+        #expect(topicsURL.contains("interface_lang=english"))
     }
 
     @Test func inflectedWordPreservesSurfaceAndAmbiguity() async throws {

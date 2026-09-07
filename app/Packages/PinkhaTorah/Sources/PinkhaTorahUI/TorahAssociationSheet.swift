@@ -4,14 +4,16 @@ import SwiftUI
 public struct TorahAssociationSheet: View {
     private let target: TorahTarget
     private let onMutation: () -> Void
+    private let onOpenReference: ((TorahInspectorSelection) -> Void)?
     @State private var workspace: TorahWorkspace?
     @State private var associations: [TorahAssociation] = []
     @State private var presentedKind: TorahAssociationKind?
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
-    public init(databasePath: String, target: TorahTarget, onMutation: @escaping () -> Void = {}) {
+    public init(databasePath: String, target: TorahTarget, onOpenReference: ((TorahInspectorSelection) -> Void)? = nil, onMutation: @escaping () -> Void = {}) {
         self.target = target
+        self.onOpenReference = onOpenReference
         self.onMutation = onMutation
         _workspace = State(initialValue: try? TorahWorkspace.application(databasePath: databasePath))
     }
@@ -23,9 +25,13 @@ public struct TorahAssociationSheet: View {
                     ContentUnavailableView(l("No Torah links"), systemImage: "books.vertical")
                 } else {
                     ForEach(associations) { association in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(association.labelHe)
-                            Text(secondaryLabel(association)).font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            Image(systemName: TorahKindAppearance.symbol(for: association.kind))
+                                .foregroundStyle(TorahKindAppearance.color(for: association.kind))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(association.labelHe)
+                                Text(secondaryLabel(association)).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -33,6 +39,19 @@ public struct TorahAssociationSheet: View {
                         .swipeActions {
                             Button(l("Delete"), role: .destructive) { remove(association) }
                                 .accessibilityIdentifier("torahDeleteAssociationButton")
+                        }
+                        .contextMenu {
+                            if association.kind == .ref, let onOpenReference {
+                                Button {
+                                    onOpenReference(.init(providerID: association.providerID, canonicalRef: association.canonicalKey))
+                                } label: {
+#if canImport(UIKit)
+                                    Label { Text(l("Open in Inspector")) } icon: { Image(uiImage: TorahKindAppearance.menuImage(for: .ref)) }
+#else
+                                    Label(l("Open in Inspector"), systemImage: TorahKindAppearance.symbol(for: .ref))
+#endif
+                                }
+                            }
                         }
                     }
                 }

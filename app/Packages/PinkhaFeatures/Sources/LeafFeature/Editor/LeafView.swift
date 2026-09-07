@@ -48,6 +48,9 @@ public struct LeafView: View {
     @State var torahTarget: TorahTarget?
     @State var torahSearchKind: TorahAssociationKind?
     @State var torahPreviewRevision = 0
+    @State var torahSourceQuotes: [String: TorahAssociation] = [:]
+    @State var torahInspectorSelection: TorahInspectorSelection?
+    @State var torahErrorMessage: String?
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
     @State var titleFocusOffset: Int? = nil
@@ -271,6 +274,7 @@ public struct LeafView: View {
                     databasePath: path,
                     target: .leaf(vm.leafId),
                     refreshToken: torahPreviewRevision,
+                    onOpenReference: { torahInspectorSelection = $0 },
                     onManage: { torahTarget = .leaf(vm.leafId) }
                 )
                 .padding(.horizontal, 20)
@@ -649,9 +653,15 @@ public struct LeafView: View {
         .sheet(isPresented: $showingBlockPicker) {
             BlockPickerSheet { type in vm.addBlock(type: type, afterId: vm.activeBlockId) }
         }
+        .task(id: "\(vm.leafId):\(torahPreviewRevision)") {
+            await reloadTorahSourceQuotes()
+        }
         .sheet(item: $torahTarget) { target in
             if let path = store.activeDatabasePath {
-                TorahAssociationSheet(databasePath: path, target: target) {
+                TorahAssociationSheet(databasePath: path, target: target, onOpenReference: {
+                    torahInspectorSelection = $0
+                    torahTarget = nil
+                }) {
                     torahPreviewRevision += 1
                 }
             } else {
@@ -667,6 +677,20 @@ public struct LeafView: View {
                 ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
             }
         }
+        .inspector(isPresented: Binding(
+            get: { torahInspectorSelection != nil },
+            set: { if !$0 { torahInspectorSelection = nil } }
+        )) {
+            if let selection = torahInspectorSelection, let path = store.activeDatabasePath {
+                TorahInspectorView(databasePath: path, selection: selection)
+                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .alert("Torah", isPresented: Binding(get: { torahErrorMessage != nil }, set: { if !$0 { torahErrorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(torahErrorMessage ?? "") }
         .sheet(isPresented: $showingPublishDateSheet) {
             LeafPublishDateSheet(
                 createdAt: vm.createdAt,

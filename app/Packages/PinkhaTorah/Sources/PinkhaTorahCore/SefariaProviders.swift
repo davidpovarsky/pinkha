@@ -13,7 +13,11 @@ private func jsonString(_ object: Any) -> String {
 }
 
 private func firstString(_ dictionary: [String: Any], keys: [String]) -> String? {
-    for key in keys where dictionary[key] is String { return dictionary[key] as? String }
+    for key in keys {
+        guard let value = dictionary[key] as? String else { continue }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+    }
     return nil
 }
 
@@ -51,10 +55,22 @@ public struct SefariaReferenceProvider: ReferenceProvider {
         let (data, response) = try await client.get(pathSegments: ["api", "ref", input])
         guard response.statusCode == 200 else { throw TorahError.invalidReference }
         guard let root = try jsonObject(data) as? [String: Any] else { throw TorahError.malformedResponse }
-        if (root["is_ref"] as? Bool) == false || root["error"] != nil { throw TorahError.invalidReference }
-        guard let canonical = firstString(root, keys: ["ref", "url", "heRef"]), !canonical.isEmpty else { throw TorahError.invalidReference }
-        let he = firstString(root, keys: ["heRef", "ref"]) ?? canonical
-        return ResolvedReference(canonical: canonical, labelHe: he, labelEn: firstString(root, keys: ["ref"]), payload: jsonString(root))
+        guard root["is_ref"] as? Bool == true else { throw TorahError.invalidReference }
+        guard let canonical = firstString(root, keys: ["normalized", "ref"]) else { throw TorahError.invalidReference }
+        let he = firstString(root, keys: ["hebrew", "heRef"]) ?? canonical
+        let navigation = root["navigation_refs"] as? [String: Any]
+        return ResolvedReference(
+            canonical: canonical,
+            labelHe: he,
+            labelEn: canonical,
+            payload: jsonString(root),
+            urlRef: firstString(root, keys: ["url_ref", "url"]),
+            nodeType: firstString(root, keys: ["node_type"]),
+            depth: root["depth"] as? Int,
+            startIndexes: root["start_indexes"] as? [Int] ?? [],
+            endIndexes: root["end_indexes"] as? [Int] ?? [],
+            firstAvailableSectionRef: navigation.flatMap { firstString($0, keys: ["first_available_section_ref"]) }
+        )
     }
 }
 

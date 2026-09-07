@@ -30,3 +30,20 @@ struct BlockReturnSemanticsTests {
         #expect(newBlockCalls == 0)
     }
 }
+
+@Suite("Reference command parser")
+struct ReferenceCommandParserTests {
+    @Test func slashAtBeginningStartsAndSingleSpacesRemainInQuery() {
+        #expect(parseReferenceCommand(text: "/", selection: NSRange(location: 1, length: 0)) == .active(query: ""))
+        let text = "/ראש השנה טז ב"
+        #expect(parseReferenceCommand(text: text, selection: NSRange(location: (text as NSString).length, length: 0)) == .active(query: "ראש השנה טז ב"))
+    }
+
+    @Test func ordinarySlashDoubleSpaceAndMovedCaretEndSession() {
+        #expect(parseReferenceCommand(text: "text / ref", selection: NSRange(location: 10, length: 0)) == .inactive)
+        let cancelled = "/Genesis  1"
+        #expect(parseReferenceCommand(text: cancelled, selection: NSRange(location: (cancelled as NSString).length, length: 0)) == .cancelled)
+        #expect(parseReferenceCommand(text: "/Genesis 1", selection: NSRange(location: 4, length: 0)) == .inactive)
+        #expect(parseReferenceCommand(text: "/Genesis 1", selection: NSRange(location: 2, length: 2)) == .inactive)
+    }
+}

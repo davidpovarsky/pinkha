@@ -22,8 +22,7 @@ final class TorahAssociationsUITests: XCTestCase {
         let add = app.buttons.matching(identifier: "torahAddLinkButton")
             .matching(NSPredicate(format: "isHittable == true")).firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 3)); add.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["torahAddKindPopover"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["torahAssociationKindRef"].exists)
+        XCTAssertTrue(app.buttons["torahAssociationKindRef"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["torahAssociationKindWord"].exists)
         XCTAssertTrue(app.buttons["torahAssociationKindTopic"].exists)
         app.buttons["torahAssociationKind\(kind)"].tap()

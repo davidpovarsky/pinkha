@@ -7,7 +7,7 @@ import PinkhaCore
 
 /// Coordinator for `RichTextEditor`: UITextView delegate + pill toolbar manager.
 /// Defined at module level to allow extensions in separate files.
-public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
+@MainActor public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate, UIPopoverPresentationControllerDelegate {
 
     var parent: RichTextEditor
     weak var tv: ExpandingTextView?
@@ -101,6 +101,14 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         var candidates: [MentionCandidate]
     }
     var mentionSession: MentionSession?
+    struct ReferenceCommandSession {
+        var query: String
+        var generation: Int
+    }
+    var referenceCommandSession: ReferenceCommandSession?
+    var referenceGeneration = 0
+    var referenceLookupTask: Task<Void, Never>?
+    weak var referencePopover: ReferenceCommandPopoverController?
     var toolbarHidden = false
     // Guard window: for ~700 ms after a menu opens, ignore spurious
     // `textViewDidChangeSelection` events UIKit emits during presentation
@@ -200,6 +208,7 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         }
         updateToolbar()
         updateUndoRedoButtons()
+        validateReferenceCommandSelection(in: tv)
         // If the user closed a menu (tap in text → selection changed),
         // restore the pill in case it is still hidden.
         // Skip during the guard window to avoid cancelling the requested hide.
@@ -281,6 +290,7 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         // placeholder, and the bar would otherwise stay on screen ready to
         // commit against a stale range.
         endMentionSession()
+        endReferenceCommandSession()
     }
 
     /// Intercepts taps / long-press-then-open on links inside the editor.
@@ -391,6 +401,7 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         // doc replaces the `@` with a `pinkha://leaf/{id}` link
         // carrying the doc's title.
         offerMentionIfTriggered(tv)
+        offerReferenceCommandIfTriggered(tv)
 
         // save() = update parent.spans + call onSaveSpans → vm.saveBlock → capture the burst anchor for undo.
         // Called on every keystroke so that canUndo is true from the first character.
@@ -620,6 +631,84 @@ public final class RichTextEditorCoordinator: NSObject, UITextViewDelegate, UIGe
         } completion: { _ in
             bar.isHidden = true
         }
+    }
+
+    private func offerReferenceCommandIfTriggered(_ tv: UITextView) {
+        guard parent.onReferenceCommandLookup != nil else { return }
+        guard case .active(let query) = parseReferenceCommand(text: tv.attributedText.string, selection: tv.selectedRange)
+        else { endReferenceCommandSession(); return }
+        referenceGeneration += 1
+        let generation = referenceGeneration
+        referenceCommandSession = ReferenceCommandSession(query: query, generation: generation)
+        referenceLookupTask?.cancel()
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let lookup = parent.onReferenceCommandLookup else {
+            referencePopover?.update([]); return
+        }
+        referenceLookupTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(275))
+            guard !Task.isCancelled else { return }
+            let values = await lookup(query)
+            guard !Task.isCancelled, let self,
+                  self.referenceCommandSession?.generation == generation,
+                  self.referenceCommandSession?.query == query else { return }
+            self.showReferencePopover(values, in: tv)
+        }
+    }
+
+    private func validateReferenceCommandSelection(in tv: UITextView) {
+        guard referenceCommandSession != nil else { return }
+        let length = (tv.attributedText.string as NSString).length
+        guard tv.selectedRange.length == 0, tv.selectedRange.location == length else {
+            endReferenceCommandSession(); return
+        }
+        updateReferenceAnchor(in: tv)
+    }
+
+    private func showReferencePopover(_ values: [ReferenceCommandCandidate], in tv: UITextView) {
+        guard !values.isEmpty else { referencePopover?.update([]); return }
+        let controller: ReferenceCommandPopoverController
+        if let existing = referencePopover { controller = existing }
+        else {
+            guard let host = tv.nearestViewController else { return }
+            controller = ReferenceCommandPopoverController()
+            controller.modalPresentationStyle = .popover
+            controller.onPick = { [weak self] candidate in
+                guard let self else { return }
+                let callback = self.parent.onReferenceCommandPick
+                self.endReferenceCommandSession()
+                callback?(candidate)
+            }
+            guard let popover = controller.popoverPresentationController else { return }
+            popover.delegate = self; popover.sourceView = tv; popover.permittedArrowDirections = [.up, .down]
+            referencePopover = controller
+            updateReferenceAnchor(in: tv)
+            host.present(controller, animated: true)
+        }
+        controller.update(values)
+        updateReferenceAnchor(in: tv)
+    }
+
+    private func updateReferenceAnchor(in tv: UITextView) {
+        guard let popover = referencePopover?.popoverPresentationController,
+              let position = tv.selectedTextRange?.end else { return }
+        var rect = tv.caretRect(for: position)
+        rect.size.width = max(rect.width, 2); rect.size.height = max(rect.height, 2)
+        popover.sourceRect = rect
+    }
+
+    func endReferenceCommandSession() {
+        referenceGeneration += 1
+        referenceLookupTask?.cancel(); referenceLookupTask = nil; referenceCommandSession = nil
+        if let controller = referencePopover {
+            controller.dismiss(animated: true)
+            referencePopover = nil
+        }
+    }
+
+    public func adaptivePresentationStyle(for controller: UIPresentationController) -> UIModalPresentationStyle { .none }
+    public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        referenceLookupTask?.cancel(); referenceLookupTask = nil; referenceCommandSession = nil; referencePopover = nil
     }
 
     /// Returns the URL when the block's spans collapse to a single

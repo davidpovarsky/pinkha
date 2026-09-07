@@ -36,14 +36,12 @@ public actor TorahStore {
           id TEXT PRIMARY KEY, target_kind TEXT NOT NULL, leaf_id TEXT NOT NULL,
           target_id TEXT NOT NULL, kind TEXT NOT NULL, provider_id TEXT NOT NULL,
           external_id TEXT NOT NULL, canonical_key TEXT NOT NULL, label_he TEXT NOT NULL,
-          label_en TEXT, raw_input TEXT, payload_json TEXT NOT NULL DEFAULT '{}',
+          label_en TEXT, raw_input TEXT, payload_json TEXT NOT NULL DEFAULT '{}', role TEXT NOT NULL DEFAULT 'context',
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS torah_assoc_target ON torah_associations(target_kind, target_id);
         CREATE INDEX IF NOT EXISTS torah_assoc_leaf ON torah_associations(leaf_id);
         CREATE INDEX IF NOT EXISTS torah_assoc_canonical ON torah_associations(kind, provider_id, canonical_key);
-        CREATE UNIQUE INDEX IF NOT EXISTS torah_assoc_no_exact_duplicates
-          ON torah_associations(target_kind, target_id, kind, provider_id, canonical_key);
         CREATE TABLE IF NOT EXISTS torah_provider_cache (
           provider_id TEXT NOT NULL, cache_key TEXT NOT NULL, payload_json TEXT NOT NULL,
           expires_at TEXT, updated_at TEXT NOT NULL, PRIMARY KEY(provider_id, cache_key)
@@ -63,11 +61,40 @@ public actor TorahStore {
             sqlite3_free(error); sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
             throw TorahError.storage(message)
         }
+        if !columnExists("role", in: "torah_associations", db: db) {
+            guard sqlite3_exec(db, "ALTER TABLE torah_associations ADD COLUMN role TEXT NOT NULL DEFAULT 'context'", nil, nil, &error) == SQLITE_OK else {
+                let message = error.map { String(cString: $0) } ?? "Torah role migration failed."
+                sqlite3_free(error)
+                throw TorahError.storage(message)
+            }
+        }
+        let v2 = """
+        DROP INDEX IF EXISTS torah_assoc_no_exact_duplicates;
+        CREATE UNIQUE INDEX IF NOT EXISTS torah_assoc_no_exact_duplicates_v2
+          ON torah_associations(target_kind, target_id, kind, role, provider_id, canonical_key);
+        INSERT OR IGNORE INTO torah_schema_migrations(version, applied_at)
+          VALUES(2, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+        """
+        guard sqlite3_exec(db, v2, nil, nil, &error) == SQLITE_OK else {
+            let message = error.map { String(cString: $0) } ?? "Torah role index migration failed."
+            sqlite3_free(error)
+            throw TorahError.storage(message)
+        }
+    }
+
+    private static func columnExists(_ column: String, in table: String, db: OpaquePointer) -> Bool {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "PRAGMA table_info(\(table))", -1, &statement, nil) == SQLITE_OK else { return false }
+        defer { sqlite3_finalize(statement) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let raw = sqlite3_column_text(statement, 1), String(cString: raw) == column { return true }
+        }
+        return false
     }
 
     public func associations(for target: TorahTarget) throws -> [TorahAssociation] {
         let sql = """
-        SELECT id, kind, provider_id, external_id, canonical_key, label_he, label_en,
+        SELECT id, kind, role, provider_id, external_id, canonical_key, label_he, label_en,
                raw_input, payload_json, created_at, updated_at
         FROM torah_associations WHERE target_kind = ? AND target_id = ?
         ORDER BY created_at, id
@@ -78,29 +105,41 @@ public actor TorahStore {
         var values: [TorahAssociation] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             guard let kind = TorahAssociationKind(rawValue: text(statement, 1)) else { continue }
+            let role = TorahAssociationRole(rawValue: text(statement, 2)) ?? .context
             values.append(TorahAssociation(
-                id: text(statement, 0), target: target, kind: kind,
-                providerID: text(statement, 2), externalID: text(statement, 3),
-                canonicalKey: text(statement, 4), labelHe: text(statement, 5),
-                labelEn: optionalText(statement, 6), rawInput: optionalText(statement, 7),
-                providerPayload: text(statement, 8),
-                createdAt: encoder.date(from: text(statement, 9)) ?? .distantPast,
-                updatedAt: encoder.date(from: text(statement, 10)) ?? .distantPast
+                id: text(statement, 0), target: target, kind: kind, role: role,
+                providerID: text(statement, 3), externalID: text(statement, 4),
+                canonicalKey: text(statement, 5), labelHe: text(statement, 6),
+                labelEn: optionalText(statement, 7), rawInput: optionalText(statement, 8),
+                providerPayload: text(statement, 9),
+                createdAt: encoder.date(from: text(statement, 10)) ?? .distantPast,
+                updatedAt: encoder.date(from: text(statement, 11)) ?? .distantPast
             ))
         }
         return values
     }
 
+    public func associations(forLeafID leafID: String) throws -> [TorahAssociation] {
+        let statement = try prepare("SELECT DISTINCT target_kind, target_id FROM torah_associations WHERE leaf_id = ?")
+        defer { sqlite3_finalize(statement) }
+        bind(leafID, at: 1, to: statement)
+        var targets: [TorahTarget] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            targets.append(text(statement, 0) == "leaf" ? .leaf(leafID) : .block(leafID: leafID, blockID: text(statement, 1)))
+        }
+        return try targets.flatMap { try associations(for: $0) }
+    }
+
     public func add(_ value: TorahAssociation) throws {
         let sql = """
         INSERT OR IGNORE INTO torah_associations
-        (id,target_kind,leaf_id,target_id,kind,provider_id,external_id,canonical_key,
+        (id,target_kind,leaf_id,target_id,kind,role,provider_id,external_id,canonical_key,
          label_he,label_en,raw_input,payload_json,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
         let statement = try prepare(sql); defer { sqlite3_finalize(statement) }
         let values: [String?] = [value.id, value.target.targetKind, value.target.leafID,
-            value.target.targetID, value.kind.rawValue, value.providerID, value.externalID,
+            value.target.targetID, value.kind.rawValue, value.role.rawValue, value.providerID, value.externalID,
             value.canonicalKey, value.labelHe, value.labelEn, value.rawInput,
             value.providerPayload, encoder.string(from: value.createdAt), encoder.string(from: value.updatedAt)]
         for (index, value) in values.enumerated() { bind(value, at: Int32(index + 1), to: statement) }

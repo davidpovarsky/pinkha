@@ -16,6 +16,7 @@ public final class TorahWorkspace {
             let provider = FixtureTorahProvider()
             return TorahWorkspace(store: store, registry: TorahProviderRegistry(
                 referenceProviders: [provider], topicProviders: [provider], lexicalProviders: [provider],
+                textProviders: [provider], relationshipProviders: [provider],
                 defaultProviderID: provider.providerID
             ))
         }
@@ -23,8 +24,11 @@ public final class TorahWorkspace {
         let reference = SefariaReferenceProvider(client: client)
         let topic = SefariaTopicProvider(client: client, store: store)
         let lexical = SefariaLexicalProvider(client: client)
+        let text = SefariaTextProvider(client: client)
+        let relationships = SefariaRelationshipProvider(client: client)
         return TorahWorkspace(store: store, registry: TorahProviderRegistry(
-            referenceProviders: [reference], topicProviders: [topic], lexicalProviders: [lexical], defaultProviderID: "sefaria"
+            referenceProviders: [reference], topicProviders: [topic], lexicalProviders: [lexical],
+            textProviders: [text], relationshipProviders: [relationships], defaultProviderID: "sefaria"
         ))
     }
 
@@ -32,9 +36,13 @@ public final class TorahWorkspace {
         try await store.associations(for: target)
     }
 
+    public func associations(forLeafID leafID: String) async throws -> [TorahAssociation] {
+        try await store.associations(forLeafID: leafID)
+    }
+
     public func add(_ association: TorahAssociation, to target: TorahTarget) async throws {
         let value = TorahAssociation(
-            id: association.id, target: target, kind: association.kind,
+            id: association.id, target: target, kind: association.kind, role: association.role,
             providerID: association.providerID, externalID: association.externalID,
             canonicalKey: association.canonicalKey, labelHe: association.labelHe,
             labelEn: association.labelEn, rawInput: association.rawInput,
@@ -51,6 +59,15 @@ public final class TorahWorkspace {
     }
     public func resolveReference(_ input: String) async throws -> ResolvedReference {
         try await registry.reference().resolveReference(input)
+    }
+    public func fetchText(reference: String, providerID: String? = nil, request: TorahTextRequest = TorahTextRequest()) async throws -> TorahTextDocument {
+        try await registry.text(providerID).fetchText(reference: reference, request: request)
+    }
+    public func links(for reference: String, providerID: String? = nil) async throws -> [TorahLinkedSource] {
+        try await registry.relationship(providerID).links(for: reference)
+    }
+    public func topics(for reference: String, providerID: String? = nil) async throws -> [TorahLinkedTopic] {
+        try await registry.relationship(providerID).topics(for: reference)
     }
     public func suggestTopics(_ query: String, limit: Int = 20) async throws -> [TopicCandidate] {
         try await registry.topic().suggestTopics(query: query, limit: limit)
@@ -70,6 +87,15 @@ public final class TorahWorkspace {
             externalID: resolved.canonical, canonicalKey: resolved.canonical,
             labelHe: resolved.labelHe, labelEn: resolved.labelEn, rawInput: rawInput,
             providerPayload: resolved.payload))
+    }
+    public func addSourceQuote(_ resolved: ResolvedReference, document: TorahTextDocument, rawInput: String, to target: TorahTarget) async throws {
+        let provider = try registry.reference().providerID
+        let provenance = TorahSourceQuoteProvenance(canonicalRef: resolved.canonical, referenceProviderPayload: resolved.payload, textDocument: document)
+        let payload = (try? String(decoding: JSONEncoder().encode(provenance), as: UTF8.self)) ?? resolved.payload
+        try await store.add(TorahAssociation(target: target, kind: .ref, role: .sourceQuote,
+            providerID: provider, externalID: resolved.canonical, canonicalKey: resolved.canonical,
+            labelHe: resolved.labelHe, labelEn: resolved.labelEn, rawInput: rawInput,
+            providerPayload: payload))
     }
     public func addTopic(_ resolved: ResolvedTopic, to target: TorahTarget) async throws {
         let provider = try registry.topic().providerID
