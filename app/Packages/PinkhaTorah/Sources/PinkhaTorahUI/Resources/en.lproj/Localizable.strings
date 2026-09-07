@@ -25,3 +25,11 @@
 "OK" = "OK";
 "Validate" = "Validate";
 "+%lld more" = "+%lld more";
+"Close" = "Close";
+"Insert into document" = "Insert into document";
+"Copy" = "Copy";
+"View details" = "View details";
+"Could not load source" = "Could not load source";
+"Could not load related sources" = "Could not load related sources";
+"Could not insert source" = "Could not insert source";
+"No Torah provider is available." = "No Torah provider is available.";

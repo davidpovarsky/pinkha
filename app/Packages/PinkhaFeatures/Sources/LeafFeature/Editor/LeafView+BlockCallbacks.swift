@@ -44,6 +44,27 @@ public extension LeafView {
         } catch is CancellationError {} catch { torahErrorMessage = error.localizedDescription }
     }
 
+    func insertTorahSourceTransfer(_ transfer: TorahSourceTransfer, afterBlockId: String?) {
+        guard let path = store.activeDatabasePath else {
+            torahErrorMessage = TorahStrings.storageUnavailable
+            return
+        }
+        Task { @MainActor in
+            do {
+                try await vm.insertTorahSourceSnapshot(
+                    transfer: transfer,
+                    afterId: afterBlockId,
+                    databasePath: path
+                )
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+            } catch is CancellationError {
+            } catch {
+                torahErrorMessage = TorahStrings.couldNotInsertSource
+            }
+        }
+    }
+
     func insertTorahSourceQuote(candidate: ReferenceCommandCandidate, blockID: String) {
         guard let path = store.activeDatabasePath else { torahErrorMessage = TorahStrings.storageUnavailable; return }
         Task { @MainActor in
@@ -82,29 +103,57 @@ public extension LeafView {
         let isSpotlit = spotlightBlockId == b.id
         let isDimmed  = spotlightBlockId != nil && !isSpotlit
         let showTint  = isSpotlit && settings.spotlightTinted
-        HStack(alignment: .center, spacing: 10) {
-            if editMode == .active { selectionButton(b.id) }
-            // Visual indentation for nested blocks. The Rust domain models
-            // nesting as `Block.children`; we flatten the tree at load time
-            // and translate the resulting `depth` to a leading padding here.
-            // Each level shifts the block right by 20 pt — enough to read at
-            // a glance, conservative to fit nested-3 on a narrow phone.
-            if b.depth > 0 {
-                Spacer().frame(width: CGFloat(b.depth) * 20)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                if editMode == .active { selectionButton(b.id) }
+                // Visual indentation for nested blocks. The Rust domain models
+                // nesting as `Block.children`; we flatten the tree at load time
+                // and translate the resulting `depth` to a leading padding here.
+                // Each level shifts the block right by 20 pt — enough to read at
+                // a glance, conservative to fit nested-3 on a narrow phone.
+                if b.depth > 0 {
+                    Spacer().frame(width: CGFloat(b.depth) * 20)
+                }
+                BlockRowView(
+                    block: block,
+                    autoFocusId: $vm.autoFocusId,
+                    autoFocusOffset: $vm.autoFocusOffset,
+                    cb: blockCallbacks(for: b)
+                )
+                // Lock disables editing, NOT navigation. Page-reference
+                // blocks are pure navigation targets (tap = push child doc)
+                // so we keep them tappable even on a locked / selection-mode
+                // parent — otherwise an imported, locked Notion page would
+                // trap the user with no way to drill into its sub-pages.
+                .disabled((vm.locked || editMode == .active) && !b.content.isNavigationTarget)
+                .allowsHitTesting((!vm.locked && editMode != .active) || b.content.isNavigationTarget)
             }
-            BlockRowView(
-                block: block,
-                autoFocusId: $vm.autoFocusId,
-                autoFocusOffset: $vm.autoFocusOffset,
-                cb: blockCallbacks(for: b)
-            )
-            // Lock disables editing, NOT navigation. Page-reference
-            // blocks are pure navigation targets (tap = push child doc)
-            // so we keep them tappable even on a locked / selection-mode
-            // parent — otherwise an imported, locked Notion page would
-            // trap the user with no way to drill into its sub-pages.
-            .disabled((vm.locked || editMode == .active) && !b.content.isNavigationTarget)
-            .allowsHitTesting((!vm.locked && editMode != .active) || b.content.isNavigationTarget)
+            if targetedDropBlockId == b.id {
+                Rectangle()
+                    .fill(effectiveAccentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 16)
+                    .transition(.opacity)
+            }
+        }
+        .dropDestination(for: TorahSourceTransfer.self) { items, _ in
+            guard let item = items.first else { return false }
+            insertTorahSourceTransfer(item, afterBlockId: b.id)
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                targetedDropBlockId = targeted ? b.id : (targetedDropBlockId == b.id ? nil : targetedDropBlockId)
+            }
+        }
+        .onDrop(of: [UTType.torahSource.identifier], isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                targetedDropBlockId = targeted ? b.id : (targetedDropBlockId == b.id ? nil : targetedDropBlockId)
+            }
+        }) { providers in
+            TorahSourceTransfer.decode(providers) { item in
+                insertTorahSourceTransfer(item, afterBlockId: b.id)
+            }
+            return true
         }
         // contentShape + onTapGesture used to be unconditional, which
         // installed an HStack-level tap recogniser that swallowed taps
@@ -321,7 +370,7 @@ public extension LeafView {
                 torahTarget = .block(leafID: vm.leafId, blockID: block.id)
             },
             sourceQuoteAssociation: torahSourceQuotes[block.id],
-            onOpenTorahReference: { requestOpenTorahInspector($0) },
+            onOpenTorahReference: { requestOpenTorahInspector($0, blockId: block.id) },
             onReferenceCommandLookup: { query in
                 guard let path = store.activeDatabasePath,
                       let workspace = try? TorahWorkspace.application(databasePath: path) else { return [] }

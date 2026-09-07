@@ -25,3 +25,11 @@
 "OK" = "אישור";
 "Validate" = "אימות";
 "+%lld more" = "+%lld נוספים";
+"Close" = "סגור";
+"Insert into document" = "הוסף למסמך";
+"Copy" = "העתק";
+"View details" = "הצג פרטים";
+"Could not load source" = "לא ניתן לטעון את המקור";
+"Could not load related sources" = "לא ניתן לטעון מקורות מקושרים";
+"Could not insert source" = "לא ניתן להוסיף את המקור";
+"No Torah provider is available." = "ספק התוכן התורני אינו זמין.";

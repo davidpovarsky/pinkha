@@ -68,7 +68,7 @@ public extension LeafViewModel {
     /// `blocks` is a *flattened* depth-first view of a tree Rust still owns
     /// as a real hierarchy, so a parent and its children are sibling rows
     /// here. Anything that removes a parent has to remove that run too.
-    private func descendantRunLength(at index: Int) -> Int {
+    func descendantRunLength(at index: Int) -> Int {
         let depth = blocks[index].depth
         var length = 0
         var cursor = index + 1
@@ -107,7 +107,7 @@ public extension LeafViewModel {
 
     /// Id of the block that owns the row at `index`, or `nil` at top level.
     /// The parent is the nearest preceding row one depth shallower.
-    private func parentId(of index: Int) -> String? {
+    func parentId(of index: Int) -> String? {
         let depth = blocks[index].depth
         guard depth > 0 else { return nil }
         var cursor = index - 1
@@ -119,7 +119,7 @@ public extension LeafViewModel {
     }
 
     /// Position of the row at `index` among its siblings.
-    private func siblingIndex(of index: Int) -> Int {
+    func siblingIndex(of index: Int) -> Int {
         let depth = blocks[index].depth
         var position = 0
         var cursor = index - 1

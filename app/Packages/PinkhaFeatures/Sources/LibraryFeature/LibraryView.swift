@@ -25,6 +25,7 @@ public struct LibraryView: View {
     @Environment(TabManager.self) var tabManager
     @State private var showingSettings = false
     @State private var torahInspectorCoordinator = TorahInspectorCoordinator()
+    @State private var torahInsertionBridge = TorahDocumentInsertionBridge()
     /// Programmatic navigation stack so a freshly-created leaf can be
     /// pushed onto the editor right after the create sheet dismisses
     /// — driven by `composer.pendingOpenLeaf`. Must stay `@State` here :
@@ -534,13 +535,24 @@ public struct LibraryView: View {
             set: { if !$0 { torahInspectorCoordinator.close() } }
         )) {
             if let selection = torahInspectorCoordinator.selection, let path = store.activeDatabasePath {
-                TorahInspectorView(databasePath: path, selection: selection)
-                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+                TorahInspectorView(
+                    databasePath: path,
+                    selection: selection,
+                    onClose: { torahInspectorCoordinator.close() },
+                    onInsertSegment: { transfer in
+                        Task { @MainActor in
+                            try? await torahInsertionBridge.insert(transfer)
+                        }
+                    }
+                )
+                .id(selection.id)
+                .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
             } else {
                 ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
             }
         }
         .environment(torahInspectorCoordinator)
+        .environment(torahInsertionBridge)
     }
 
     /// Bulk delete every selected library item. Routes leaves through
