@@ -225,7 +225,7 @@ public struct RichTextEditor: UIViewRepresentable {
         longPress.delegate = context.coordinator
         tv.addGestureRecognizer(longPress)
         if spans.isEmpty { tv.attributedText = context.coordinator.placeholder() }
-        else { tv.attributedText = withExtras(spansToAttributed(spans, police: baseFont, blockColor: blockColor, themeForeground: themeForegroundColor)) }
+        else { tv.attributedText = withExtras(spansToAttributed(spans, police: baseFont, blockColor: blockColor, themeForeground: themeForegroundColor, writingDirection: nativeWritingDirection)) }
         return tv
     }
 
@@ -289,7 +289,6 @@ public struct RichTextEditor: UIViewRepresentable {
             // so iOS re-renders the keyboard with the new appearance
             // while it's already on screen — otherwise the swap only
             // takes effect the *next* time the keyboard is shown.
-            if tv.isFirstResponder { tv.reloadInputViews() }
         }
         // Hard iOS limitation — the keyboard host window lives in
         // another process (`UIRemoteKeyboardWindow`) and only takes
@@ -323,7 +322,7 @@ public struct RichTextEditor: UIViewRepresentable {
                 ? NSAttributedString(string: "",
                                       attributes: [.font: baseFont,
                                                    .foregroundColor: themeForegroundColor ?? UIColor.label])
-                : withExtras(spansToAttributed(spans, police: baseFont, blockColor: blockColor, themeForeground: themeForegroundColor))
+                : withExtras(spansToAttributed(spans, police: baseFont, blockColor: blockColor, themeForeground: themeForegroundColor, writingDirection: nativeWritingDirection))
             if !coord.isEditing {
                 tv.font = baseFont
                 tv.attributedText = spans.isEmpty ? coord.placeholder() : editingText
@@ -361,20 +360,40 @@ public struct RichTextEditor: UIViewRepresentable {
             coord.lastSyncedThemeForeground = themeForegroundColor
         }
 
-        if isFocused && !tv.isFirstResponder && !coord.refocusSuppressed {
+        if coord.focusRequestState.consume(requested: isFocused), !tv.isFirstResponder {
             let pos = focusCursorAt
-            DispatchQueue.main.async {
+            coord.focusAcquisitionGeneration += 1
+            let generation = coord.focusAcquisitionGeneration
+            DispatchQueue.main.async { [weak coord, weak tv] in
+                guard let coord, let tv,
+                      !coord.isDismantled,
+                      coord.focusAcquisitionGeneration == generation,
+                      coord.parent.isFocused,
+                      tv.window != nil,
+                      !tv.isFirstResponder else { return }
                 _ = tv.becomeFirstResponder()
                 let loc = pos.map { min($0, tv.text.count) } ?? tv.text.count
                 tv.selectedRange = NSRange(location: loc, length: 0)
             }
         } else if !isFocused && tv.isFirstResponder {
+            coord.focusAcquisitionGeneration += 1
             tv.resignFirstResponder()
         }
         // L'etat SwiftUI a rattrape l'intention : le drapeau a fait son
         // office, on le baisse pour que le prochain focus programmatique
         // (nouveau bloc, reinsertion par annulation) passe normalement.
-        if !isFocused { coord.refocusSuppressed = false }
+    }
+
+    public static func dismantleUIView(_ uiView: ExpandingTextView, coordinator: RichTextEditorCoordinator) {
+        coordinator.dismantle(uiView)
+    }
+
+    private var nativeWritingDirection: NSWritingDirection {
+        switch textDirection {
+        case "rtl": .rightToLeft
+        case "ltr": .leftToRight
+        default: .natural
+        }
     }
 
     /// Overlays `extraAttrs` (e.g. strikethrough for todo) on top of the span-derived attributes.

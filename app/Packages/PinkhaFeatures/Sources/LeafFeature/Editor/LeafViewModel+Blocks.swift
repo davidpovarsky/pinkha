@@ -388,10 +388,31 @@ public extension LeafViewModel {
     /// `InvalidOperation` from the FFI (block is the first of its level —
     /// nothing to indent under) surfaces via `errorMessage` like any other
     /// error; the UI uses `.errorAlert` to show it.
+    func canOutdentBlock(_ id: String) -> Bool {
+        guard let block = blocks.first(where: { $0.id == id }) else { return false }
+        return block.depth > 0
+    }
+
+    func canIndentBlock(_ id: String) -> Bool {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return false }
+        let depth = blocks[index].depth
+        var cursor = index - 1
+        while cursor >= 0 {
+            let candidateDepth = blocks[cursor].depth
+            if candidateDepth < depth { return false }
+            if candidateDepth == depth { return true }
+            cursor -= 1
+        }
+        return false
+    }
+
     func indentBlock(id: String) {
+        guard canIndentBlock(id) else { return }
         flushAllBursts()
         do {
             try api.indentBlock(leafId: leafId, blockId: id)
+            reloadBlocksAfterStructuralChange()
+        } catch PinkhaError.InvalidOperation {
             reloadBlocksAfterStructuralChange()
         } catch {
             errorMessage = error.localizedDescription
@@ -402,9 +423,12 @@ public extension LeafViewModel {
     /// inserted right after the former parent. Same reload semantics as
     /// `indentBlock`.
     func outdentBlock(id: String) {
+        guard canOutdentBlock(id) else { return }
         flushAllBursts()
         do {
             try api.outdentBlock(leafId: leafId, blockId: id)
+            reloadBlocksAfterStructuralChange()
+        } catch PinkhaError.InvalidOperation {
             reloadBlocksAfterStructuralChange()
         } catch {
             errorMessage = error.localizedDescription

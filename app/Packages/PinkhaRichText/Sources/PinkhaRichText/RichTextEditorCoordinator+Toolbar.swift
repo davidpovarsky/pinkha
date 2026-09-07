@@ -174,8 +174,10 @@ extension RichTextEditorCoordinator {
         // FFI `indent_block` / `outdent_block` via closures owned by the
         // LeafViewModel (which knows the block identity).
         separator()
-        addButton(symbolButton("decrease.quotelevel", label: "Outdent", action: #selector(toolbarOutdent)))
-        addButton(symbolButton("increase.quotelevel", label: "Indent", action: #selector(toolbarIndent)))
+        let paragraphOutdent = symbolButton("decrease.quotelevel", label: "Decrease paragraph indent", action: #selector(toolbarOutdent))
+        addButton(paragraphOutdent); btnParagraphOutdent = paragraphOutdent
+        let paragraphIndent = symbolButton("increase.quotelevel", label: "Increase paragraph indent", action: #selector(toolbarIndent))
+        addButton(paragraphIndent); btnParagraphIndent = paragraphIndent
 
         separator()
         addButton(symbolButton("return", label: "Line Break", action: #selector(toolbarLineBreak)))
@@ -210,9 +212,6 @@ extension RichTextEditorCoordinator {
 
     @objc func dismissKeyboard() {
         toolbarActionInProgress = false
-        // Empeche la reprogrammation du focus pendant que la mise en page
-        // encaisse la descente du clavier. Cf. `refocusSuppressed`.
-        refocusSuppressed = true
         tv?.resignFirstResponder()
     }
 
@@ -241,12 +240,47 @@ extension RichTextEditorCoordinator {
 
     @objc func toolbarIndent() {
         toolbarActionInProgress = false
-        parent.onIndent?()
+        changeParagraphIndent(by: 1)
     }
 
     @objc func toolbarOutdent() {
         toolbarActionInProgress = false
-        parent.onOutdent?()
+        changeParagraphIndent(by: -1)
+    }
+
+    private func changeParagraphIndent(by delta: Int) {
+        guard let tv else { return }
+        let selection = selectionForToolbar(
+            currentSelection: tv.selectedRange, length: tv.attributedText.length)
+        let direction: NSWritingDirection = switch parent.textDirection {
+        case "rtl": .rightToLeft
+        case "ltr": .leftToRight
+        default: .natural
+        }
+        if tv.attributedText.length == 0 {
+            let current = (tv.typingAttributes[.pinkhaParagraphIndentLevel] as? NSNumber)?.intValue ?? 0
+            let next = max(0, min(Int(PinkhaParagraphIndent.maximumLevel), current + delta))
+            guard next != current else { updateToolbar(); return }
+            if next == 0 { tv.typingAttributes.removeValue(forKey: .pinkhaParagraphIndentLevel) }
+            else { tv.typingAttributes[.pinkhaParagraphIndentLevel] = next }
+            tv.typingAttributes[.paragraphStyle] = pinkhaParagraphStyle(
+                for: parent.baseFont, indentLevel: UInt8(next), writingDirection: direction)
+            updateToolbar()
+            return
+        }
+        tv.undoManager?.beginUndoGrouping()
+        tv.textStorage.beginEditing()
+        let changed = PinkhaParagraphIndent.apply(
+            delta: delta, to: tv.textStorage, selection: selection,
+            font: parent.baseFont, writingDirection: direction)
+        tv.textStorage.endEditing()
+        tv.undoManager?.endUndoGrouping()
+        guard changed else { updateToolbar(); return }
+        tv.selectedRange = selection
+        rememberSelection(selection, length: tv.attributedText.length)
+        save(attributedToSpans(tv.attributedText, police: parent.baseFont))
+        tv.invalidateIntrinsicContentSize()
+        updateToolbar()
     }
 
     /// Toolbar link button : reads the current selection, presents an
@@ -270,8 +304,7 @@ extension RichTextEditorCoordinator {
         }()
         if range.length > 0 {
             promptForLink(prefill: existing, hasLabel: true) { [weak self] url in
-                self?.applyStyle(.link(url ?? ""))
-                _ = self?.tv?.becomeFirstResponder()
+                self?.applyStyle(.link(url ?? ""), restoreFocus: false)
             }
         } else {
             // No selection : ask for both label + URL, insert as a new
@@ -281,7 +314,7 @@ extension RichTextEditorCoordinator {
                 guard let self, let tv = self.tv,
                       let url, !url.isEmpty,
                       let resolved = URL(string: url)
-                else { _ = self?.tv?.becomeFirstResponder(); return }
+                else { return }
                 let label = url
                 let m = NSMutableAttributedString(attributedString: tv.attributedText)
                 let insert = NSMutableAttributedString(string: label,
@@ -298,7 +331,6 @@ extension RichTextEditorCoordinator {
                 tv.selectedRange = NSRange(location: newCursor, length: 0)
                 save(attributedToSpans(tv.attributedText, police: parent.baseFont))
                 updateToolbar()
-                _ = tv.becomeFirstResponder()
             }
         }
     }

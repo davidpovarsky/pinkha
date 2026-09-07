@@ -68,6 +68,8 @@ public struct BlockCallbacks {
     /// `InvalidOperation` if the block can't move (first in level / at root).
     public var onIndent: (() -> Void)? = nil
     public var onOutdent: (() -> Void)? = nil
+    public var canIndent = false
+    public var canOutdent = false
     /// Block-level colour pipeline: provider reads the current value so the
     /// toolbar's ¶ button can highlight the active colour, and the closure
     /// applies a new one (nil = clear back to default) via the VM.
@@ -322,6 +324,24 @@ public struct BlockRowView: View {
                         Image(uiImage: Self.neutralIcon("plus.square.on.square"))
                     }
                 }
+            }
+            if let onIndent = cb.onIndent {
+                Button {
+                    Haptic.tap()
+                    onIndent()
+                } label: {
+                    Label("Indent Block", systemImage: "arrow.right.to.line")
+                }
+                .disabled(!cb.canIndent)
+            }
+            if let onOutdent = cb.onOutdent {
+                Button {
+                    Haptic.tap()
+                    onOutdent()
+                } label: {
+                    Label("Outdent Block", systemImage: "arrow.left.to.line")
+                }
+                .disabled(!cb.canOutdent)
             }
             if let onTorahAssociations = cb.onTorahAssociations {
                 Button(action: onTorahAssociations) {

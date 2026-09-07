@@ -193,7 +193,7 @@ public extension LeafView {
             // direction). FFI's `indentBlock` no-ops if the block is
             // already the first child or has no previous sibling, so
             // we don't need to gate the button on hierarchy state.
-            if !vm.locked && editMode != .active {
+            if !vm.locked && editMode != .active && vm.canIndentBlock(b.id) {
                 Button {
                     Haptic.tap()
                     vm.indentBlock(id: b.id)
@@ -214,13 +214,15 @@ public extension LeafView {
                 // Outdent as secondary — left-swipe surfaces both
                 // buttons; partial swipe reveals them without firing
                 // delete. Direction matches the block's movement (left).
-                Button {
-                    Haptic.tap()
-                    vm.outdentBlock(id: b.id)
-                } label: {
-                    Label("Outdent", systemImage: "arrow.left.to.line")
+                if vm.canOutdentBlock(b.id) {
+                    Button {
+                        Haptic.tap()
+                        vm.outdentBlock(id: b.id)
+                    } label: {
+                        Label("Outdent", systemImage: "arrow.left.to.line")
+                    }
+                    .tint(.orange)
                 }
-                .tint(.orange)
                 Button {
                     Haptic.tap()
                     torahTarget = .block(leafID: vm.leafId, blockID: b.id)
@@ -335,6 +337,8 @@ public extension LeafView {
             canRedoProvider: { vm.canRedo },
             onIndent: { vm.indentBlock(id: block.id) },
             onOutdent: { vm.outdentBlock(id: block.id) },
+            canIndent: vm.canIndentBlock(block.id),
+            canOutdent: vm.canOutdentBlock(block.id),
             onSetBlockColor: { color in vm.setBlockColor(id: block.id, color: color) },
             onSetBlockBackgroundColor: { color in
                 vm.setBlockBackgroundColor(id: block.id, color: color)

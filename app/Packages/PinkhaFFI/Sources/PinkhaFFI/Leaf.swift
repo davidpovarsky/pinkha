@@ -294,8 +294,9 @@ public enum InlineStyleFfi: Codable, Equatable {
     case bold, italic, underline, strikethrough
     case color(String)
     case link(String)
+    case paragraphIndent(UInt8)
 
-    private enum K: String, CodingKey { case Bold, Italic, Underline, Strikethrough, Color, Link }
+    private enum K: String, CodingKey { case Bold, Italic, Underline, Strikethrough, Color, Link, ParagraphIndent }
 
     public init(from decoder: Decoder) throws {
         // Unit variants are serialized as plain strings by serde.
@@ -312,6 +313,7 @@ public enum InlineStyleFfi: Codable, Equatable {
         let c = try decoder.container(keyedBy: K.self)
         if let v = try? c.decode(String.self, forKey: .Color) { self = .color(v); return }
         if let v = try? c.decode(String.self, forKey: .Link)  { self = .link(v);  return }
+        if let v = try? c.decode(UInt8.self, forKey: .ParagraphIndent) { self = .paragraphIndent(v); return }
         throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown InlineStyle"))
     }
 
@@ -323,6 +325,7 @@ public enum InlineStyleFfi: Codable, Equatable {
         case .strikethrough:var c = encoder.singleValueContainer(); try c.encode("Strikethrough")
         case .color(let v): var c = encoder.container(keyedBy: K.self); try c.encode(v, forKey: .Color)
         case .link(let v):  var c = encoder.container(keyedBy: K.self); try c.encode(v, forKey: .Link)
+        case .paragraphIndent(let v): var c = encoder.container(keyedBy: K.self); try c.encode(v, forKey: .ParagraphIndent)
         }
     }
 }

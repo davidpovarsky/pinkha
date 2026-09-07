@@ -3,6 +3,32 @@ import SwiftUI
 import PinkhaFFI
 import PinkhaCore
 
+/// Turns a SwiftUI Boolean focus binding into edge-triggered requests.
+/// A consumed `true` never reacquires focus until `false` is observed first.
+public struct EditorFocusRequestState: Sendable {
+    private var requestIsActive = false
+    private var dismantled = false
+
+    public init() {}
+
+    public mutating func consume(requested: Bool) -> Bool {
+        guard !dismantled else { return false }
+        let shouldAcquire = requested && !requestIsActive
+        requestIsActive = requested
+        return shouldAcquire
+    }
+
+    public mutating func noteNativeFocus() {
+        guard !dismantled else { return }
+        requestIsActive = true
+    }
+
+    public mutating func dismantle() {
+        dismantled = true
+        requestIsActive = false
+    }
+}
+
 // ── Coordinator RichTextEditor ────────────────────────────────────────────────
 
 /// Coordinator for `RichTextEditor`: UITextView delegate + pill toolbar manager.
@@ -28,7 +54,9 @@ import PinkhaCore
     /// et l'en empecher fait atterrir le curseur n'importe ou — les taps
     /// deviennent des selections de mots et la correction arriere emporte des
     /// lignes entieres. Teste, constate, reverti.
-    var refocusSuppressed = false
+    var focusRequestState = EditorFocusRequestState()
+    var focusAcquisitionGeneration = 0
+    var isDismantled = false
     var shiftEnterTyped = false
     var lastSelection = NSRange(location: 0, length: 0)
     // Active typing color without a selection: UIKit resets typingAttributes
@@ -53,6 +81,8 @@ import PinkhaCore
     var currentAccentColor: UIColor?
     weak var btnUndo: UIButton?
     weak var btnRedo: UIButton?
+    weak var btnParagraphIndent: UIButton?
+    weak var btnParagraphOutdent: UIButton?
     var lastCanUndo: Bool?
     var lastCanRedo: Bool?
     /// Spans already synced with the text view — allows skipping the `spansToAttributed`
@@ -180,7 +210,8 @@ import PinkhaCore
         isEditing = true
         // L'utilisateur revient dans un bloc : l'intention de fermeture est
         // caduque.
-        refocusSuppressed = false
+        focusAcquisitionGeneration += 1
+        focusRequestState.noteNativeFocus()
         parent.isFocused = true
         rememberSelection(tv.selectedRange, length: tv.attributedText.length)
         // Default foreground: block-level colour when set, otherwise the
@@ -195,7 +226,16 @@ import PinkhaCore
                 .foregroundColor: defaultForeground
             ])
         }
-        tv.typingAttributes = [.font: parent.baseFont, .foregroundColor: defaultForeground]
+        var typing: [NSAttributedString.Key: Any] = [
+            .font: parent.baseFont, .foregroundColor: defaultForeground
+        ]
+        if tv.attributedText.length > 0 {
+            let location = min(tv.selectedRange.location, tv.attributedText.length - 1)
+            let attrs = tv.attributedText.attributes(at: location, effectiveRange: nil)
+            typing[.paragraphStyle] = attrs[.paragraphStyle]
+            typing[.pinkhaParagraphIndentLevel] = attrs[.pinkhaParagraphIndentLevel]
+        }
+        tv.typingAttributes = typing
         updateToolbar()
     }
 
@@ -259,7 +299,14 @@ import PinkhaCore
         }
         attributes[.font] = attributes[.font] ?? parent.baseFont
         attributes[.foregroundColor] = attributes[.foregroundColor] ?? UIColor.label
-        attributes[.paragraphStyle] = pinkhaParagraphStyle(for: parent.baseFont)
+        let indent = (attributes[.pinkhaParagraphIndentLevel] as? NSNumber)?.uint8Value ?? 0
+        let direction: NSWritingDirection = switch parent.textDirection {
+        case "rtl": .rightToLeft
+        case "ltr": .leftToRight
+        default: .natural
+        }
+        attributes[.paragraphStyle] = pinkhaParagraphStyle(
+            for: parent.baseFont, indentLevel: indent, writingDirection: direction)
         tv.textStorage.replaceCharacters(in: range, with: NSAttributedString(string: separator, attributes: attributes))
         tv.selectedRange = NSRange(location: range.location + 1, length: 0)
         tv.typingAttributes = attributes
@@ -269,6 +316,7 @@ import PinkhaCore
 
     public func textViewDidEndEditing(_ tv: UITextView) {
         isEditing = false
+        focusAcquisitionGeneration += 1
         parent.isFocused = false
         guard !isDeleting else { return }
         // If the UITextView is being detached from the view hierarchy (a
@@ -291,6 +339,33 @@ import PinkhaCore
         // commit against a stale range.
         endMentionSession()
         endReferenceCommandSession()
+    }
+
+    func dismantle(_ textView: ExpandingTextView) {
+        guard !isDismantled else { return }
+        isDismantled = true
+        focusAcquisitionGeneration += 1
+        focusRequestState.dismantle()
+        referenceGeneration += 1
+        referenceLookupTask?.cancel()
+        referenceLookupTask = nil
+        referenceCommandSession = nil
+        referencePopover?.dismiss(animated: false)
+        referencePopover = nil
+        mentionSession = nil
+        mentionBar?.removeFromSuperview()
+        if textView.isFirstResponder { textView.resignFirstResponder() }
+        textView.inputAccessoryView = nil
+        textView.delegate = nil
+        textView.onShiftEnter = nil
+        textView.onToggleBold = nil
+        textView.onToggleItalic = nil
+        textView.onToggleUnderline = nil
+        textView.onNavigatePrevious = nil
+        textView.onNavigateNext = nil
+        textView.onStopNavigationRepeat = nil
+        tv = nil
+        NotificationCenter.default.removeObserver(self)
     }
 
     /// Intercepts taps / long-press-then-open on links inside the editor.

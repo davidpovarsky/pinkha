@@ -95,12 +95,70 @@ struct AttributedRoundTripTests {
         let styles = attributedToSpans(attributed, police: font).flatMap(\.styles).map(StyleKey.from)
         #expect(styles.contains(.italic))
     }
+
+    @Test func paragraphIndentRoundTripsWithEveryInlineCombination() {
+        let combinations: [[InlineStyleFfi]] = [
+            [.paragraphIndent(2)], [.paragraphIndent(2), .bold],
+            [.paragraphIndent(2), .italic], [.paragraphIndent(2), .color("blue")],
+            [.paragraphIndent(2), .link("https://pinkha.app")]
+        ]
+        for styles in combinations {
+            let back = attributedToSpans(
+                spansToAttributed([.init(content: "text", styles: styles)], police: font),
+                police: font)
+            let keys = Set(back.flatMap(\.styles).map(StyleKey.from))
+            for style in styles { #expect(keys.contains(StyleKey.from(style))) }
+        }
+    }
+
+    @Test func paragraphSpacingIndentAndRTLCoexist() {
+        let attributed = spansToAttributed(
+            [.init(content: "פסקה", styles: [.paragraphIndent(3)])],
+            police: font, writingDirection: .rightToLeft)
+        let style = attributed.attribute(.paragraphStyle, at: 0, effectiveRange: nil)
+            as? NSParagraphStyle
+        #expect(style?.baseWritingDirection == .rightToLeft)
+        #expect(abs((style?.headIndent ?? 0) - font.lineHeight * 1.3 * 3) < 0.01)
+        #expect(abs((style?.paragraphSpacing ?? 0) - font.lineHeight * 0.45) < 0.01)
+    }
+
+    @Test func paragraphRangesDistinguishSoftAndParagraphSeparators() {
+        let text = "a\u{2028}b\u{2029}c"
+        let softLineSelection = NSRange(location: 2, length: 1)
+        #expect(PinkhaParagraphIndent.ranges(in: text, intersecting: softLineSelection)
+            == [NSRange(location: 0, length: 4)])
+        let acrossParagraphs = NSRange(location: 0, length: (text as NSString).length)
+        #expect(PinkhaParagraphIndent.ranges(in: text, intersecting: acrossParagraphs)
+            == [NSRange(location: 0, length: 4), NSRange(location: 4, length: 1)])
+    }
+
+    @Test func caretAndThreeParagraphSelectionChangeExpectedRangesAndClamp() {
+        let text = "one\u{2029}two\u{2029}three"
+        let attributed = NSMutableAttributedString(
+            attributedString: spansToAttributed([.init(content: text, styles: [])], police: font))
+        #expect(PinkhaParagraphIndent.apply(
+            delta: 1, to: attributed, selection: NSRange(location: 5, length: 0), font: font))
+        let ranges = PinkhaParagraphIndent.ranges(
+            in: text, intersecting: NSRange(location: 0, length: attributed.length))
+        #expect(ranges.map { PinkhaParagraphIndent.level(in: attributed, range: $0) } == [0, 1, 0])
+        #expect(PinkhaParagraphIndent.apply(
+            delta: 1, to: attributed, selection: NSRange(location: 0, length: attributed.length), font: font))
+        #expect(ranges.map { PinkhaParagraphIndent.level(in: attributed, range: $0) } == [1, 2, 1])
+        for _ in 0..<10 {
+            _ = PinkhaParagraphIndent.apply(
+                delta: -1, to: attributed,
+                selection: NSRange(location: 0, length: attributed.length), font: font)
+        }
+        #expect(ranges.map { PinkhaParagraphIndent.level(in: attributed, range: $0) } == [0, 0, 0])
+        #expect(!PinkhaParagraphIndent.canChange(
+            by: -1, in: attributed, selection: NSRange(location: 0, length: attributed.length)))
+    }
 }
 
 /// Reduces `InlineStyleFfi` to a simple Hashable identifier for tests
 /// (the real type is not Hashable because of its associated-value cases).
 private enum StyleKey: Hashable {
-    case bold, italic, underline, strikethrough, color(String), link(String)
+    case bold, italic, underline, strikethrough, color(String), link(String), paragraphIndent(UInt8)
     static func from(_ s: InlineStyleFfi) -> StyleKey {
         switch s {
         case .bold:           return .bold
@@ -109,6 +167,7 @@ private enum StyleKey: Hashable {
         case .strikethrough:  return .strikethrough
         case .color(let n):   return .color(n)
         case .link(let u):    return .link(u)
+        case .paragraphIndent(let level): return .paragraphIndent(level)
         }
     }
 }
