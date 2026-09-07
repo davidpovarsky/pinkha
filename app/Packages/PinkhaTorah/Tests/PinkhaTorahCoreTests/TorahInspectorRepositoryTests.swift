@@ -2,6 +2,19 @@ import Foundation
 import Testing
 @testable import PinkhaTorahCore
 
+private actor TestCounter {
+    private var count = 0
+
+    func increment() -> Int {
+        count += 1
+        return count
+    }
+
+    func value() -> Int {
+        count
+    }
+}
+
 private func makeSampleDocument(ref: String, section: String = "Genesis 1", segmentsCount: Int = 3) -> TorahTextDocument {
     TorahTextDocument(
         providerID: "sefaria-fixture",
@@ -24,11 +37,11 @@ private func makeSampleDocument(ref: String, section: String = "Genesis 1", segm
 struct TorahInspectorRepositoryTests {
 
     @Test @MainActor func simultaneousRequestsPerformSingleProviderFetchAndReturnSameDocument() async throws {
-        var fetchCount = 0
+        let fetchCount = TestCounter()
         let repo = TorahInspectorRepository(
             documentCapacity: 10,
             textFetcher: { ref, _ in
-                fetchCount += 1
+                _ = await fetchCount.increment()
                 try await Task.sleep(for: .milliseconds(50))
                 return makeSampleDocument(ref: ref)
             }
@@ -39,42 +52,46 @@ struct TorahInspectorRepositoryTests {
 
         let (doc1, doc2) = try await (req1, req2)
 
-        #expect(fetchCount == 1)
+        let finalFetchCount = await fetchCount.value()
+        #expect(finalFetchCount == 1)
         #expect(doc1.canonicalRef == "Genesis 1:1")
         #expect(doc2.canonicalRef == "Genesis 1:1")
         #expect(doc1.id == doc2.id)
     }
 
     @Test @MainActor func completedRequestIsServedFromCacheWithoutNewFetch() async throws {
-        var fetchCount = 0
+        let fetchCount = TestCounter()
         let repo = TorahInspectorRepository(
             documentCapacity: 10,
             textFetcher: { ref, _ in
-                fetchCount += 1
+                _ = await fetchCount.increment()
                 return makeSampleDocument(ref: ref)
             }
         )
 
         _ = try await repo.document(for: "Genesis 1:1", providerID: "sefaria-fixture")
-        #expect(fetchCount == 1)
+        let fetchCountAfterFirstRequest = await fetchCount.value()
+        #expect(fetchCountAfterFirstRequest == 1)
 
         let cached = try await repo.document(for: "Genesis 1:1", providerID: "sefaria-fixture")
-        #expect(fetchCount == 1)
+        let fetchCountAfterCachedRequest = await fetchCount.value()
+        #expect(fetchCountAfterCachedRequest == 1)
         #expect(cached.canonicalRef == "Genesis 1:1")
     }
 
     @Test @MainActor func sectionAndCanonicalAliasesAreResolvedFromCache() async throws {
-        var fetchCount = 0
+        let fetchCount = TestCounter()
         let repo = TorahInspectorRepository(
             documentCapacity: 10,
             textFetcher: { ref, _ in
-                fetchCount += 1
+                _ = await fetchCount.increment()
                 return makeSampleDocument(ref: "Genesis 1:1-5", section: "Genesis 1")
             }
         )
 
         _ = try await repo.document(for: "Genesis 1:1", providerID: "sefaria-fixture")
-        #expect(fetchCount == 1)
+        let finalFetchCount = await fetchCount.value()
+        #expect(finalFetchCount == 1)
 
         // Requesting by section ref should hit cache
         let bySection = repo.cachedDocument(for: "Genesis 1", providerID: "sefaria-fixture")
@@ -87,12 +104,12 @@ struct TorahInspectorRepositoryTests {
     }
 
     @Test @MainActor func failedRequestIsRemovedFromInFlightAndRetryPerformsNewRequest() async throws {
-        var attempt = 0
+        let attempt = TestCounter()
         let repo = TorahInspectorRepository(
             documentCapacity: 10,
             textFetcher: { ref, _ in
-                attempt += 1
-                if attempt == 1 {
+                let currentAttempt = await attempt.increment()
+                if currentAttempt == 1 {
                     throw TorahError.network("Connection error")
                 }
                 return makeSampleDocument(ref: ref)
@@ -104,12 +121,14 @@ struct TorahInspectorRepositoryTests {
             _ = try await repo.document(for: "Genesis 1:1", providerID: "sefaria-fixture")
             Issue.record("Expected failure on first attempt")
         } catch {
-            #expect(attempt == 1)
+            let attemptAfterFailure = await attempt.value()
+            #expect(attemptAfterFailure == 1)
         }
 
         // Retry must perform a fresh request
         let retried = try await repo.document(for: "Genesis 1:1", providerID: "sefaria-fixture")
-        #expect(attempt == 2)
+        let finalAttempt = await attempt.value()
+        #expect(finalAttempt == 2)
         #expect(retried.canonicalRef == "Genesis 1:1")
     }
 
@@ -169,11 +188,11 @@ struct TorahInspectorRepositoryTests {
     }
 
     @Test @MainActor func reversingScrollReusesSessionCache() async throws {
-        var fetchCount = 0
+        let fetchCount = TestCounter()
         let repo = TorahInspectorRepository(
             documentCapacity: 10,
             textFetcher: { ref, _ in
-                fetchCount += 1
+                _ = await fetchCount.increment()
                 return makeSampleDocument(ref: ref, section: ref)
             }
         )
@@ -182,11 +201,13 @@ struct TorahInspectorRepositoryTests {
         _ = try await repo.document(for: "Section 1", providerID: "sefaria-fixture")
         _ = try await repo.document(for: "Section 2", providerID: "sefaria-fixture")
         _ = try await repo.document(for: "Section 3", providerID: "sefaria-fixture")
-        #expect(fetchCount == 3)
+        let fetchCountAfterForwardScroll = await fetchCount.value()
+        #expect(fetchCountAfterForwardScroll == 3)
 
         // User scrolls back to section 1: served from session cache without new fetches
         _ = try await repo.document(for: "Section 2", providerID: "sefaria-fixture")
         _ = try await repo.document(for: "Section 1", providerID: "sefaria-fixture")
-        #expect(fetchCount == 3)
+        let fetchCountAfterReverseScroll = await fetchCount.value()
+        #expect(fetchCountAfterReverseScroll == 3)
     }
 }
