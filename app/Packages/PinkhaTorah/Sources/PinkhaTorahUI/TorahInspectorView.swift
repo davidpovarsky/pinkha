@@ -1,6 +1,7 @@
 import Observation
 import PinkhaTorahCore
 import SwiftUI
+@_exported import TorahInspectorUI
 
 @MainActor @Observable
 public final class TorahInspectorModel {
@@ -39,34 +40,15 @@ public struct TorahInspectorView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            if let repository {
-                TorahSourceReaderView(
-                    selection: selection,
-                    repository: repository,
-                    onInsertSegment: onInsertSegment,
-                    onClose: onClose
-                )
-                .navigationDestination(for: TorahInspectorRoute.self) { route in
-                    switch route {
-                    case .segment(let segment):
-                        TorahSegmentDetailView(
-                            segment: segment,
-                            providerID: selection.providerID,
-                            repository: repository,
-                            onInsertSegment: onInsertSegment,
-                            onClose: onClose
-                        )
-                    case .source(let nextSelection):
-                        TorahSourceReaderView(
-                            selection: nextSelection,
-                            repository: repository,
-                            onInsertSegment: onInsertSegment,
-                            onClose: onClose
-                        )
-                    }
-                }
-            } else {
+        if let repository {
+            TorahInspectorUI.TorahInspectorView(
+                repository: repository,
+                selection: selection,
+                onClose: onClose,
+                onInsertSegment: onInsertSegment
+            )
+        } else {
+            NavigationStack {
                 ContentUnavailableView(
                     TorahStrings.storageUnavailable,
                     systemImage: "exclamationmark.triangle"

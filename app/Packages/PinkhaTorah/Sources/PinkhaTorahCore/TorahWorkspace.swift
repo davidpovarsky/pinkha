@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import TorahInspectorCore
 
 @MainActor @Observable
 public final class TorahWorkspace {

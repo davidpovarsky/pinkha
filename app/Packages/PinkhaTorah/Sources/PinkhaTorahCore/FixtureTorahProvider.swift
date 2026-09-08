@@ -1,4 +1,5 @@
 import Foundation
+import TorahInspectorCore
 
 public struct FixtureTorahProvider: ReferenceProvider, TopicProvider, LexicalProvider, TextProvider, RelationshipProvider {
     public let providerID = "sefaria-fixture"

@@ -1,4 +1,5 @@
 import Foundation
+import TorahInspectorCore
 
 private func sefariaObject(_ data: Data) throws -> Any {
     do { return try JSONSerialization.jsonObject(with: data) }

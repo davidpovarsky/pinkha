@@ -1,4 +1,5 @@
 import Foundation
+@_exported import TorahInspectorCore
 
 public protocol ReferenceProvider: Sendable {
     var providerID: String { get }
@@ -17,17 +18,6 @@ public protocol LexicalProvider: Sendable {
     var providerID: String { get }
     func suggestWords(prefix: String, context: TorahLexicalContext?) async throws -> [WordCandidate]
     func resolveWord(surface: String, context: TorahLexicalContext?) async throws -> [ResolvedWord]
-}
-
-public protocol TextProvider: Sendable {
-    var providerID: String { get }
-    func fetchText(reference: String, request: TorahTextRequest) async throws -> TorahTextDocument
-}
-
-public protocol RelationshipProvider: Sendable {
-    var providerID: String { get }
-    func links(for reference: String) async throws -> [TorahLinkedSource]
-    func topics(for reference: String) async throws -> [TorahLinkedTopic]
 }
 
 public struct TorahProviderRegistry: Sendable {

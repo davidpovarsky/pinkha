@@ -9,16 +9,25 @@ let package = Package(
         .library(name: "PinkhaTorahCore", targets: ["PinkhaTorahCore"]),
         .library(name: "PinkhaTorahUI", targets: ["PinkhaTorahUI"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/davidpovarsky/TorahInspectorKit.git", exact: "0.1.0")
+    ],
     targets: [
         .systemLibrary(name: "CSQLite", path: "Sources/CSQLite"),
         .target(
             name: "PinkhaTorahCore",
-            dependencies: ["CSQLite"],
+            dependencies: [
+                "CSQLite",
+                .product(name: "TorahInspectorCore", package: "TorahInspectorKit")
+            ],
             path: "Sources/PinkhaTorahCore"
         ),
         .target(
             name: "PinkhaTorahUI",
-            dependencies: ["PinkhaTorahCore"],
+            dependencies: [
+                "PinkhaTorahCore",
+                .product(name: "TorahInspectorUI", package: "TorahInspectorKit")
+            ],
             path: "Sources/PinkhaTorahUI",
             resources: [.process("Resources")]
         ),
