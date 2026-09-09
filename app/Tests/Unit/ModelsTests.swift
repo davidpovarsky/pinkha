@@ -37,10 +37,18 @@ struct InlineStyleFfiTests {
         #expect(json == "{\"Link\":\"https:\\/\\/pinkha.app\"}")
     }
 
+    @Test func paragraphIndentSerializesAsKeyedInteger() throws {
+        #expect(try encode(InlineStyleFfi.paragraphIndent(2)) == "{\"ParagraphIndent\":2}")
+        let decoded = try JSONDecoder().decode(
+            InlineStyleFfi.self, from: Data("{\"ParagraphIndent\":6}".utf8))
+        #expect(decoded == .paragraphIndent(6))
+    }
+
     @Test func roundTripsAllVariants() throws {
         let originals: [InlineStyleFfi] = [
             .bold, .italic, .underline, .strikethrough,
-            .color("bleu"), .link("https://x.com")
+            .color("bleu"), .link("https://x.com"),
+            .paragraphIndent(0), .paragraphIndent(1), .paragraphIndent(6)
         ]
         for original in originals {
             let data = try JSONEncoder().encode(original)

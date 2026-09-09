@@ -32,6 +32,23 @@ extension RichTextEditorCoordinator {
         updateTextStyleButton(bold: bold, italic: italic, underline: underline, strike: strike)
         updateColorButton(color)
         updatePasteButton()
+        let indentSelection = selectionForToolbar(currentSelection: range, length: len)
+        if len == 0 {
+            let level = (tv.typingAttributes[.pinkhaParagraphIndentLevel] as? NSNumber)?.intValue ?? 0
+            applyEnabled(btnParagraphOutdent, enabled: level > 0, symbol: "decrease.quotelevel")
+            applyEnabled(btnParagraphIndent,
+                         enabled: level < Int(PinkhaParagraphIndent.maximumLevel),
+                         symbol: "increase.quotelevel")
+        } else {
+            applyEnabled(btnParagraphOutdent,
+                         enabled: PinkhaParagraphIndent.canChange(
+                            by: -1, in: attr, selection: indentSelection),
+                         symbol: "decrease.quotelevel")
+            applyEnabled(btnParagraphIndent,
+                         enabled: PinkhaParagraphIndent.canChange(
+                            by: 1, in: attr, selection: indentSelection),
+                         symbol: "increase.quotelevel")
+        }
     }
 
     func setSymbolActive(_ btn: UIButton?, active: Bool, name: String, size: CGFloat = 22) {

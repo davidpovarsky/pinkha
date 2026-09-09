@@ -45,7 +45,7 @@ extension RichTextEditorCoordinator {
         updateToolbar()
     }
 
-    func applyStyle(_ style: InlineStyleFfi) {
+    func applyStyle(_ style: InlineStyleFfi, restoreFocus: Bool = true) {
         defer { toolbarActionInProgress = false }
         guard let tv, let attr = tv.attributedText else { return }
         let range = selectionForToolbar(currentSelection: tv.selectedRange, length: attr.length)
@@ -113,6 +113,8 @@ extension RichTextEditorCoordinator {
             } else if let resolved = URL(string: url) {
                 m.addAttribute(.link, value: resolved, range: range)
             }
+        case .paragraphIndent:
+            break
         }
 
         tv.textStorage.beginEditing()
@@ -124,7 +126,7 @@ extension RichTextEditorCoordinator {
         updateToolbar()
         // The color menu (showsMenuAsPrimaryAction) resigns first responder;
         // restore it to keep the keyboard and selection visible.
-        _ = tv.becomeFirstResponder()
+        if restoreFocus { _ = tv.becomeFirstResponder() }
     }
 
     func applyStyleTyping(tv: UITextView, style: InlineStyleFfi) {

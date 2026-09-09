@@ -29,6 +29,8 @@ public extension NSAttributedString.Key {
     static let pinkhaItalic = NSAttributedString.Key("com.pinkha.italic")
     /// Obliqueness value stored alongside italic for fonts where `withSymbolicTraits` fails.
     static let pinkhaObliqueness = NSAttributedString.Key("NSObliqueness")
+    /// Serializable logical paragraph indent level (rendered relative to the font).
+    static let pinkhaParagraphIndentLevel = NSAttributedString.Key("com.pinkha.paragraph-indent-level")
 }
 
 // ── Font utilities ────────────────────────────────────────────────────────────

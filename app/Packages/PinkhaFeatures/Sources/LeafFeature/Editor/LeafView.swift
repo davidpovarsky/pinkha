@@ -3,6 +3,8 @@ import PinkhaFFI
 import PinkhaCore
 import PinkhaComposer
 import PinkhaDesignSystem
+import PinkhaTorahCore
+import PinkhaTorahUI
 
 // ── Leaf view ─────────────────────────────────────────────────────────────
 
@@ -43,6 +45,26 @@ public struct LeafView: View {
     /// Drives the flush-on-background below.
     @Environment(\.scenePhase) var scenePhase
     @State var showingBlockPicker = false
+    @State var torahTarget: TorahTarget?
+    @State var torahSearchKind: TorahAssociationKind?
+    @State var torahPreviewRevision = 0
+    @State var torahSourceQuotes: [String: TorahAssociation] = [:]
+    @State var torahErrorMessage: String?
+    let onOpenTorahInspector: ((TorahInspectorSelection) -> Void)?
+    @Environment(TorahInspectorCoordinator.self) private var torahInspectorCoordinator: TorahInspectorCoordinator?
+    @Environment(TorahDocumentInsertionBridge.self) var torahInsertionBridge: TorahDocumentInsertionBridge?
+    @State var targetedDropBlockId: String? = nil
+    @State private var pendingInspectorRequest: TorahInspectorSelection?
+
+    func requestOpenTorahInspector(_ selection: TorahInspectorSelection, blockId: String? = nil) {
+        let anchorBlockId = blockId ?? vm.activeBlockId
+        torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: anchorBlockId)
+        if let onOpenTorahInspector {
+            onOpenTorahInspector(selection)
+        } else if let torahInspectorCoordinator {
+            torahInspectorCoordinator.open(selection)
+        }
+    }
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
     @State var titleFocusOffset: Int? = nil
@@ -136,7 +158,8 @@ public struct LeafView: View {
     /// tab keeps its in-memory state).
     public init(vm: LeafViewModel,
          onDisappear: (() -> Void)? = nil,
-         scrollToBlockId: String? = nil) {
+         scrollToBlockId: String? = nil,
+         onOpenTorahInspector: ((TorahInspectorSelection) -> Void)? = nil) {
         let leafId = vm.leafId
         let lockKey = Self.lockKeyFor(leafId: leafId)
         let iconKey = Self.iconKeyFor(leafId: leafId)
@@ -147,6 +170,7 @@ public struct LeafView: View {
         self.iconKey = iconKey
         self.onDisappear = onDisappear
         self.scrollToBlockId = scrollToBlockId
+        self.onOpenTorahInspector = onOpenTorahInspector
     }
 
     public var body: some View {
@@ -253,10 +277,31 @@ public struct LeafView: View {
                     if let nouvelleIcone {
                         recentEmojis = saveRecentEmoji(nouvelleIcone)
                     }
+                },
+                onTorahAdd: readerMode.isActive ? nil : { kind in
+                    torahSearchKind = kind
                 }
             )
             .listRowBackground(Color.clear).listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets()).moveDisabled(true).deleteDisabled(true)
+
+            if !readerMode.isActive, let path = store.activeDatabasePath {
+                TorahLeafAssociationsPreview(
+                    databasePath: path,
+                    target: .leaf(vm.leafId),
+                    refreshToken: torahPreviewRevision,
+                    onOpenReference: { selection in
+                        Task { @MainActor in
+                            await Task.yield()
+                            requestOpenTorahInspector(selection)
+                        }
+                    },
+                    onManage: { torahTarget = .leaf(vm.leafId) }
+                )
+                .padding(.horizontal, 20)
+                .listRowBackground(Color.clear).listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets()).moveDisabled(true).deleteDisabled(true)
+            }
 
             LeafTitleView(title: $vm.title, focusDemande: $focusTitle,
                               focusCursorOffset: $titleFocusOffset,
@@ -328,6 +373,12 @@ public struct LeafView: View {
                     .listRowBackground(Color.clear).listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 70, trailing: 20))
                     .moveDisabled(true).deleteDisabled(true)
+                    .dropDestination(for: TorahSourceTransfer.self) { items, _ in
+                        guard let item = items.first else { return false }
+                        insertTorahSourceTransfer(item, afterBlockId: nil)
+                        return true
+                    }
+
             }
         }
         .listStyle(.plain)
@@ -557,6 +608,18 @@ public struct LeafView: View {
         .onAppear {
             vm.load()
             composer.currentContext = .leaf(id: vm.leafId)
+            torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: vm.activeBlockId)
+            torahInsertionBridge?.onInsert = { [weak vm] transfer, anchor in
+                guard let vm, let path = store.activeDatabasePath else { return }
+                let targetBlockId = anchor?.blockId ?? vm.activeBlockId
+                try await vm.insertTorahSourceSnapshot(
+                    transfer: transfer,
+                    afterId: targetBlockId,
+                    databasePath: path
+                )
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+            }
             // Load every doc's metadata (root + sub-pages) so the
             // breadcrumb in the toolbar can walk the `parentLeafId`
             // chain. `store.leaves` only contains root pages.
@@ -588,6 +651,11 @@ public struct LeafView: View {
                 UserDefaults.standard.removeObject(forKey: lockKey)
             }
         }
+        .onChange(of: vm.activeBlockId) { _, newBlockId in
+            if let newBlockId {
+                torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: newBlockId)
+            }
+        }
         // Typing is persisted lazily: block edits land 300 ms after the last
         // keystroke (`saveBlock`'s burst debounce) and the title only on
         // end-editing. `onDisappear` flushes both — but it does NOT fire
@@ -600,6 +668,9 @@ public struct LeafView: View {
             vm.saveTitle()
         }
         .onDisappear {
+            if torahInsertionBridge?.activeAnchor?.leafId == vm.leafId {
+                torahInsertionBridge?.onInsert = nil
+            }
             vm.flushAllBursts()
             vm.saveTitle()
             // Only reset the creation context to `.root` if it still
@@ -629,6 +700,43 @@ public struct LeafView: View {
         .sheet(isPresented: $showingBlockPicker) {
             BlockPickerSheet { type in vm.addBlock(type: type, afterId: vm.activeBlockId) }
         }
+        .task(id: "\(vm.leafId):\(torahPreviewRevision)") {
+            await reloadTorahSourceQuotes()
+        }
+        .sheet(item: $torahTarget, onDismiss: {
+            if let pending = pendingInspectorRequest {
+                pendingInspectorRequest = nil
+                requestOpenTorahInspector(pending)
+            }
+        }) { target in
+            if let path = store.activeDatabasePath {
+                TorahAssociationSheet(databasePath: path, target: target, onOpenReference: { selection in
+                    pendingInspectorRequest = selection
+                    torahTarget = nil
+                }) {
+                    torahPreviewRevision += 1
+                }
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .sheet(item: $torahSearchKind, onDismiss: {
+            if let pending = pendingInspectorRequest {
+                pendingInspectorRequest = nil
+                requestOpenTorahInspector(pending)
+            }
+        }) { kind in
+            if let path = store.activeDatabasePath {
+                TorahSearchSheet(databasePath: path, target: .leaf(vm.leafId), kind: kind) {
+                    torahPreviewRevision += 1
+                }
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .alert("Torah", isPresented: Binding(get: { torahErrorMessage != nil }, set: { if !$0 { torahErrorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(torahErrorMessage ?? "") }
         .sheet(isPresented: $showingPublishDateSheet) {
             LeafPublishDateSheet(
                 createdAt: vm.createdAt,
@@ -862,7 +970,9 @@ public struct LeafView: View {
         // The destination view runs through `onAppear { vm.load() }`, so the
         // target leaf loads from SQLite without any extra plumbing.
         .navigationDestination(item: $pushedLeafId) { leafId in
-            LeafView(vm: tabManager.open(leafId: leafId, api: vm.api), onDisappear: nil)
+            LeafView(vm: tabManager.open(leafId: leafId, api: vm.api),
+                     onDisappear: nil,
+                     onOpenTorahInspector: onOpenTorahInspector)
                 // Mention-link pushes are editorial navigation — a Books-style
                 // crossfade reads better than a hard slide. The list-driven
                 // push in `LibraryView` keeps its zoom (Notes-style tile
