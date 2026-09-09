@@ -190,13 +190,33 @@ jobs:
           check_target ChavrusaNotesShare "$SHARE_BUNDLE_ID" "$SHARE_PROFILE_SPECIFIER" Extensions/Share/ChavrusaNotesShare.entitlements
           check_target ChavrusaNotesWidgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_SPECIFIER" Extensions/Widgets/ChavrusaNotesWidgets.entitlements
 
-      - name: Diagnostic Release compile sweep across all targets
+      - name: Diagnostic Release compile sweep across scheme and extension targets
         shell: bash
         run: |
           set -uo pipefail
           mkdir -p "$BUILD_DIR/logs/compile"
-          targets=("Pinkha" "ChavrusaNotesShare" "ChavrusaNotesWidgets")
           failed=()
+
+          echo "::group::Compile scheme $SCHEME (main app)"
+          app_log="$BUILD_DIR/logs/compile/${SCHEME}-compile.log"
+          if ! xcodebuild build \
+            -project "$PROJECT_PATH" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$BUILD_DIR/DerivedData-Preflight" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | tee "$app_log"; then
+            echo "::error::Compilation failed for scheme $SCHEME"
+            failed+=("$SCHEME")
+          else
+            echo "Compilation succeeded for scheme $SCHEME"
+          fi
+          echo "::endgroup::"
+
+          targets=("ChavrusaNotesShare" "ChavrusaNotesWidgets")
           for target in "${targets[@]}"; do
             echo "::group::Compile target $target"
             log="$BUILD_DIR/logs/compile/${target}-compile.log"
@@ -204,8 +224,7 @@ jobs:
               -project "$PROJECT_PATH" \
               -target "$target" \
               -configuration Release \
-              -destination 'generic/platform=iOS' \
-              -derivedDataPath "$BUILD_DIR/DerivedData" \
+              -sdk iphoneos \
               CODE_SIGNING_ALLOWED=NO \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
@@ -217,11 +236,12 @@ jobs:
             fi
             echo "::endgroup::"
           done
+
           if [ ${#failed[@]} -gt 0 ]; then
-            echo "::error::Diagnostic compile sweep failed for targets: ${failed[*]}"
+            echo "::error::Diagnostic compile sweep failed for: ${failed[*]}"
             exit 1
           fi
-          echo "Diagnostic compile sweep passed for all targets"
+          echo "Diagnostic compile sweep passed for all targets and scheme"
 
       - name: Archive signed Release app
         shell: bash
