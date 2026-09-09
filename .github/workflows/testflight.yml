@@ -146,8 +146,10 @@ jobs:
               containers=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-identifiers' "$plist")
               services=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-services' "$plist")
               grep -Fq "$ICLOUD_CONTAINER" <<< "$containers"
-              grep -Fq 'CloudDocuments' <<< "$services"
-              grep -Fq 'CloudKit' <<< "$services"
+              if [ "$services" != "*" ]; then
+                grep -Fq 'CloudDocuments' <<< "$services"
+                grep -Fq 'CloudKit' <<< "$services"
+              fi
               test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "$plist")" = production
             fi
             cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
