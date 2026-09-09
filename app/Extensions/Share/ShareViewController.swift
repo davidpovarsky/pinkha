@@ -38,9 +38,10 @@ final class ShareViewController: SLComposeServiceViewController {
     override func configurationItems() -> [Any]! { [] }
 
     private func firstAttachment() async throws -> (text: String, url: URL?) {
-        let providers = extensionContext?.inputItems
+        let providers: [NSItemProvider] = (extensionContext?.inputItems ?? [])
             .compactMap { $0 as? NSExtensionItem }
-            .flatMap(\.attachments) ?? []
+            .compactMap(\.attachments)
+            .flatMap { $0 }
 
         for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
             let value = try await provider.loadItem(forTypeIdentifier: UTType.url.identifier)

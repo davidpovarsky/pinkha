@@ -190,6 +190,39 @@ jobs:
           check_target ChavrusaNotesShare "$SHARE_BUNDLE_ID" "$SHARE_PROFILE_SPECIFIER" Extensions/Share/ChavrusaNotesShare.entitlements
           check_target ChavrusaNotesWidgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_SPECIFIER" Extensions/Widgets/ChavrusaNotesWidgets.entitlements
 
+      - name: Diagnostic Release compile sweep across all targets
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p "$BUILD_DIR/logs/compile"
+          targets=("Pinkha" "ChavrusaNotesShare" "ChavrusaNotesWidgets")
+          failed=()
+          for target in "${targets[@]}"; do
+            echo "::group::Compile target $target"
+            log="$BUILD_DIR/logs/compile/${target}-compile.log"
+            if ! xcodebuild build \
+              -project "$PROJECT_PATH" \
+              -target "$target" \
+              -configuration Release \
+              -destination 'generic/platform=iOS' \
+              -derivedDataPath "$BUILD_DIR/DerivedData" \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              | tee "$log"; then
+              echo "::error::Compilation failed for target $target"
+              failed+=("$target")
+            else
+              echo "Compilation succeeded for target $target"
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "::error::Diagnostic compile sweep failed for targets: ${failed[*]}"
+            exit 1
+          fi
+          echo "Diagnostic compile sweep passed for all targets"
+
       - name: Archive signed Release app
         shell: bash
         run: |
