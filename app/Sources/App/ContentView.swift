@@ -137,9 +137,19 @@ struct ContentView: View {
                 }.value
             }
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .background, let api = store.api else { return }
-                Task.detached(priority: .utility) {
-                    LibrarySnapshots.runIfDue(api: api)
+                switch phase {
+                case .active:
+                    store.importPendingSharedCaptures()
+                    if SharedIntentCommandStore.consumeNewNoteRequest() {
+                        composer.openNewLeaf()
+                    }
+                case .background:
+                    guard let api = store.api else { return }
+                    Task.detached(priority: .utility) {
+                        LibrarySnapshots.runIfDue(api: api)
+                    }
+                default:
+                    break
                 }
             }
             // When a leaf is open with a Books-style theme override
@@ -208,9 +218,18 @@ struct ContentView: View {
             }
             .modifier(ContentSheets(composer: composer, store: store, settings: settings, tabManager: tabManager))
             .modifier(ContentAlerts(composer: composer, store: store))
-            .onAppear { store.connect() }
+            .onAppear {
+                store.connect()
+                store.importPendingSharedCaptures()
+                if SharedIntentCommandStore.consumeNewNoteRequest() {
+                    composer.openNewLeaf()
+                }
+            }
             .task { composer.bindQuickActions() }
             .errorAlert(message: $store.errorMessage, onRetry: store.load)
+            .userActivity("com.itorah.chavrusanotes.library") { activity in
+                activity.title = "ChavrusaNotes Library"
+            }
     }
 
     /// Whether the CreateBubble should render in the current context.

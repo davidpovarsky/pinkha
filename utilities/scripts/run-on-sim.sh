@@ -23,7 +23,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."   # → repo root (utilities/scripts/.. = utilities, ../.. = repo)
 
-BUNDLE_ID="com.gloiiire.pinkha"
+BUNDLE_ID="com.itorah.chavrusanotes"
 DEFAULT_SIM="Pinkha SIM"
 
 # ── DEVELOPER_DIR sanity (same hardening as run-on-device.sh) ─────────────

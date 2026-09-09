@@ -1,6 +1,6 @@
 name: Pinkha
 options:
-  bundleIdPrefix: com.gloiiire
+  bundleIdPrefix: com.itorah
   # L'icone est un bundle Icon Composer (app/Pinkha.icon), pas une entree
   # d'Assets.xcassets. xcodegen ne sait ni enregistrer un bundle .icon ni
   # poser ASSETCATALOG_COMPILER_APPICON_NAME, donc le projet genere embarque
@@ -85,6 +85,7 @@ targets:
           # iCloud Drive conflict copies ("Foo 2.swift", "Foo 3.swift") must
           # never enter the build — they're not real source files.
           - "**/* [2-9].swift"
+      - path: Shared
       # Fontes embarquees sous SIL OFL (redistribuables) : Newsreader
       # pour le theme Tranquille, Playfair Display pour Calme. Elles
       # remplacent Publico et Canela, qui appartiennent a Commercial
@@ -116,17 +117,26 @@ targets:
       - path: Sources/Assets.xcassets
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gloiiire.pinkha
+        PRODUCT_NAME: ChavrusaNotes
+        PRODUCT_MODULE_NAME: Pinkha
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes
         CODE_SIGN_ENTITLEMENTS: Sources/Pinkha.entitlements
         INFOPLIST_FILE: Sources/Info.plist
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "6"
         SWIFT_VERSION: "5.0"
         EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
         OTHER_LDFLAGS: "$(inherited) -lc++"
-        DEVELOPMENT_TEAM: N49VNC2G57
+        DEVELOPMENT_TEAM: NA6HPWARQ2
       configs:
         Debug:
           # Required so test targets can `@testable import Pinkha`.
           ENABLE_TESTABILITY: YES
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(CHAVRUSANOTES_MAIN_PROFILE)
     dependencies:
       - package: PinkhaFFI
         product: PinkhaFFI
@@ -150,6 +160,64 @@ targets:
         product: SearchFeature
       - package: Sentry
         product: Sentry
+      - target: ChavrusaNotesShare
+        embed: true
+      - target: ChavrusaNotesWidgets
+        embed: true
+
+  ChavrusaNotesShare:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.1"
+    sources:
+      - path: Extensions/Share
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: ChavrusaNotesShare
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes.share
+        CODE_SIGN_ENTITLEMENTS: Extensions/Share/ChavrusaNotesShare.entitlements
+        INFOPLIST_FILE: Extensions/Share/Info.plist
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "6"
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: NA6HPWARQ2
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(CHAVRUSANOTES_SHARE_PROFILE)
+
+  ChavrusaNotesWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.1"
+    sources:
+      - path: Extensions/Widgets
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: ChavrusaNotesWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes.widgets
+        CODE_SIGN_ENTITLEMENTS: Extensions/Widgets/ChavrusaNotesWidgets.entitlements
+        INFOPLIST_FILE: Extensions/Widgets/Info.plist
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "6"
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: NA6HPWARQ2
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Automatic
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(CHAVRUSANOTES_WIDGETS_PROFILE)
 
   # Tests unitaires : code Swift pur (modèles Codable, helpers, extensions).
   PinkhaTests:
@@ -160,10 +228,10 @@ targets:
       - path: Tests/Unit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gloiiire.pinkha.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes.tests
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: N49VNC2G57
+        DEVELOPMENT_TEAM: NA6HPWARQ2
     dependencies:
       - target: Pinkha
 
@@ -176,10 +244,10 @@ targets:
       - path: Tests/Integration
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gloiiire.pinkha.integration
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes.integration
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: N49VNC2G57
+        DEVELOPMENT_TEAM: NA6HPWARQ2
     dependencies:
       - target: Pinkha
 
@@ -192,9 +260,9 @@ targets:
       - path: Tests/UI
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gloiiire.pinkha.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.itorah.chavrusanotes.uitests
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: N49VNC2G57
+        DEVELOPMENT_TEAM: NA6HPWARQ2
     dependencies:
       - target: Pinkha

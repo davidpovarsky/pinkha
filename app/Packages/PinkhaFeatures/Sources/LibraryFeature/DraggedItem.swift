@@ -63,5 +63,5 @@ public extension UTType {
     /// Custom drag UTI for in-app shelf / leaf moves. Exported in
     /// `Info.plist` would matter for cross-app drags ; here we just
     /// need a stable identifier the system can hash on.
-    static let pinkhaItem = UTType(exportedAs: "com.gloiiire.pinkha.draggedItem")
+    static let pinkhaItem = UTType(exportedAs: "com.itorah.chavrusanotes.draggedItem")
 }

@@ -1,144 +1,336 @@
-name: TestFlight
+name: Build Signed ChavrusaNotes IPA and Upload to TestFlight
 
-# ── Triggers ─────────────────────────────────────────────────────────────────
-#
-# Une promotion vers `beta-test` livre aux testeurs. C'est ce que le nom de la
-# branche promet, et jusqu'ici il ne le tenait pas : le déclencheur était
-# manuel, donc promouvoir ne produisait rien et rien ne le disait.
-#
-# La pause avait une vraie raison, aujourd'hui périmée. Les runners macOS de
-# GitHub embarquent Xcode 16 / SDK iOS 18 alors que pinkha cible iOS 26 —
-# l'archivage échouait sur « iOS deployment target is set to 26.0, but the
-# range of supported deployment target versions is 12.0 to 18.2.99 ». Le
-# runner auto-hébergé porte Xcode 27 ; le job y tourne désormais.
-#
-# **Ce qui ne peut pas changer le binaire ne déclenche pas de livraison.**
-# `paths-ignore` ne saute que si TOUS les fichiers touchés y figurent : un
-# changement de documentation mêlé à du code livre quand même, ce qui est le
-# comportement voulu. Sans ce garde, un correctif de CI promu jusqu'en haut
-# consommerait une place de téléversement Apple — elles sont comptées par
-# application, par plateforme et par jour. (Piège rapporté par la session
-# ONTBibleApp, qui a perdu dix des onze places d'une journée le 2026-08-31.)
-#
-# `workflow_dispatch` reste, pour éprouver une modification de ce fichier seul.
 on:
-  push:
-    branches: [beta-test]
-    paths-ignore:
-      - ".github/workflows/**"
-      - "**/*.md"
-      - "utilities/docs/**"
-      # Outillage interne : ne produit pas une ligne du binaire.
-      - "crates/pinkha-mcp/**"
   workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: Validate and upload the exported IPA to App Store Connect
+        required: true
+        type: boolean
+        default: true
 
-# ── Concurrency ──────────────────────────────────────────────────────────────
-#
-# Cancel any in-flight TestFlight build when a newer commit lands on
-# beta-test. Two parallel uploads would race for the next build number
-# (latest_testflight + 1) and the loser would get rejected by ASC.
-# ── Concurrency ──────────────────────────────────────────────────────────────
-#
-# **Un seul groupe pour les deux workflows.** La ressource partagee est la
-# fiche App Store Connect, pas le fichier : TestFlight et App Store se
-# disputent le meme numero de build.
-#
-# `cancel-in-progress: false` — le second attend, il n'annule pas le premier.
-# Annuler un televersement a mi-chemin ne laisse pas un etat propre : il peut
-# avoir abouti cote Apple pendant que le job meurt cote GitHub. On aurait
-# alors un build chez Apple que la CI croit inexistant, et le numero suivant
-# entrerait en collision. (Regle et raison rapportees par la session
-# ONTBibleApp, qui l'a mesuree.)
+permissions:
+  contents: read
+
 concurrency:
-  group: apple-delivery
+  group: chavrusanotes-testflight-${{ github.ref }}
   cancel-in-progress: false
 
-jobs:
-  testflight:
-    # macOS is mandatory : xcodebuild + signing only work on Apple's
-    # toolchain. `macos-14` ships Xcode 16 by default — fastlane picks
-    # it up automatically.
-    # Runner auto-hébergé : c'est la seule machine qui porte Xcode 27, donc
-    # le seul endroit où une cible iOS 26 s'archive. Contrepartie assumée,
-    # identique au job Swift de `ci.yml` : machine éteinte = le job attend
-    # puis expire, il ne livre pas une build fausse.
-    runs-on: [self-hosted, macOS, ARM64, xcode27]
+env:
+  PROJECT_PATH: app/Pinkha.xcodeproj
+  SCHEME: PinkhaRelease
+  TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  APP_BUNDLE_ID: com.itorah.chavrusanotes
+  SHARE_BUNDLE_ID: com.itorah.chavrusanotes.share
+  WIDGETS_BUNDLE_ID: com.itorah.chavrusanotes.widgets
+  PRIVATE_APP_GROUP: group.com.itorah.chavrusanotes
+  SHARED_APP_GROUP: group.com.itorah.shared
+  ICLOUD_CONTAINER: iCloud.com.itorah.chavrusanotes
+  BUILD_DIR: ${{ github.workspace }}/build/signed-ios
 
-    # 30 min hard ceiling. A normal build finishes in ~15 min ; past
-    # 30 min something is wedged and re-trying is cheaper than waiting.
-    timeout-minutes: 30
+jobs:
+  build-sign-and-upload:
+    runs-on: xcode-27
+    timeout-minutes: 120
 
     steps:
-      # 1. Pull the code from the beta-test branch.
       - name: Checkout source
-        uses: actions/checkout@v7
-        # Fetch full history so `git describe` / changelog helpers can
-        # see the commits, not just the latest one.
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
-      # 2. Pin the Xcode version. The macos-14 runner has several
-      #    Xcodes installed ; this picks the one matching our minimum
-      #    iOS SDK. Drop `xcode-version` to use whatever's default.
-      - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - name: Show Apple toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
-      # 3. Ruby + Bundler. `bundler-cache: true` caches the gems
-      #    install between runs so we don't re-download fastlane each
-      #    time (saves ~1 minute per build).
-      - name: Setup Ruby + bundler cache
-        uses: ruby/setup-ruby@v1
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          ruby-version: '3.2'
-          bundler-cache: true
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
 
-      # 4. The actual build + upload. Every ENV here mirrors what
-      #    `fastlane/.env` carries locally — the lane code itself is
-      #    environment-agnostic.
-      - name: Build and upload to TestFlight
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Prepare build inputs and regenerate Xcode project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp app/Config/Secrets.xcconfig.example app/Config/Secrets.xcconfig
+          command -v xcodegen >/dev/null || brew install xcodegen
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          chmod +x build-xcframework.sh utilities/scripts/patch-app-icon.rb
+          ./build-xcframework.sh release
+          (cd app && xcodegen generate)
+          python3 utilities/scripts/verify-apple-identity.py
+
+      - name: Compute build number
+        shell: bash
+        run: |
+          build_number=$((GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          echo "BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
+          echo "Using CFBundleVersion $build_number"
+
+      - name: Restore App Store Connect API key
+        if: ${{ inputs.upload_to_testflight }}
+        shell: bash
         env:
-          # `ensure_git_branch` would fail on GitHub Actions because
-          # the checkout is in detached-HEAD state, not on a named
-          # branch. The lane respects this opt-out env var.
-          SKIP_BRANCH_CHECK: "true"
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID_VALUE: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID_VALUE: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          for required in ASC_KEY_P8_B64 ASC_KEY_ID_VALUE ASC_ISSUER_ID_VALUE; do
+            test -n "${!required:-}" || { echo "::error::Missing signing secret $required"; exit 1; }
+          done
+          mkdir -p "$HOME/.appstoreconnect/private_keys" "$HOME/.private_keys"
+          key_path="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID_VALUE}.p8"
+          printf '%s' "$ASC_KEY_P8_B64" | base64 --decode > "$key_path"
+          cp "$key_path" "$HOME/.private_keys/AuthKey_${ASC_KEY_ID_VALUE}.p8"
+          chmod 600 "$key_path" "$HOME/.private_keys/AuthKey_${ASC_KEY_ID_VALUE}.p8"
+          echo "ASC_KEY_ID=$ASC_KEY_ID_VALUE" >> "$GITHUB_ENV"
+          echo "ASC_ISSUER_ID=$ASC_ISSUER_ID_VALUE" >> "$GITHUB_ENV"
+          echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
-          APP_STORE_CONNECT_API_KEY_ID:      ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID:   ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
-          APP_STORE_CONNECT_API_KEY_BASE64:  "true"
+      - name: Import distribution certificate and all provisioning profiles
+        shell: bash
+        env:
+          CERTIFICATE_B64: ${{ secrets.APPLE_CERTIFICATE_P12_B64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          MAIN_PROFILE_B64: ${{ secrets.APPLE_MAIN_PROVISIONING_PROFILE_B64 }}
+          SHARE_PROFILE_B64: ${{ secrets.APPLE_SHARE_PROVISIONING_PROFILE_B64 }}
+          WIDGETS_PROFILE_B64: ${{ secrets.APPLE_WIDGETS_PROVISIONING_PROFILE_B64 }}
+        run: |
+          set -Eeuo pipefail
+          for required in TEAM_ID CERTIFICATE_B64 CERTIFICATE_PASSWORD MAIN_PROFILE_B64 SHARE_PROFILE_B64 WIDGETS_PROFILE_B64; do
+            test -n "${!required:-}" || { echo "::error::Missing signing secret $required"; exit 1; }
+          done
 
-          MATCH_PASSWORD:                ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          keychain="$RUNNER_TEMP/chavrusanotes-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          certificate="$RUNNER_TEMP/apple-distribution.p12"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles" "$BUILD_DIR/logs"
+          printf '%s' "$CERTIFICATE_B64" | base64 --decode > "$certificate"
 
-          # fastlane sometimes prompts for the keychain password ;
-          # we feed the runner's default to skip the interactive step.
-          # On macos-14 runners the default keychain has no password
-          # so the empty string is correct.
-          MATCH_KEYCHAIN_NAME:     "fastlane_keychain"
-          # Nom(s) du groupe TestFlight destinataire, tels qu'ils apparaissent
-          # dans App Store Connect. Variable de depot (non secrete) plutot que
-          # valeur en dur : le nom change sans toucher au code, et le lane
-          # echoue bruyamment si elle est vide plutot que de livrer aux seuls
-          # testeurs internes en silence.
-          TESTFLIGHT_GROUPS:       ${{ vars.TESTFLIGHT_GROUPS }}
-          MATCH_KEYCHAIN_PASSWORD: ""
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -P "$CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security default-keychain -d user -s "$keychain"
+          security find-identity -v -p codesigning "$keychain" | grep 'Apple Distribution'
 
-          # Silence fastlane's metrics opt-in dialog on CI.
-          FASTLANE_SKIP_UPDATE_CHECK: "true"
-          FASTLANE_HIDE_CHANGELOG:    "true"
-        run: bundle exec fastlane ios beta
+          install_profile() {
+            local role="$1" bundle_id="$2" encoded="$3" env_prefix="$4"
+            local profile="$RUNNER_TEMP/${role}.mobileprovision"
+            local plist="$BUILD_DIR/logs/${role}-profile.plist"
+            printf '%s' "$encoded" | base64 --decode > "$profile"
+            security cms -D -i "$profile" > "$plist"
+            local uuid name team app_identifier get_task_allow
+            uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist")
+            name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist")
+            team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$plist")
+            app_identifier=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$plist")
+            get_task_allow=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$plist")
+            test "$team" = "$TEAM_ID"
+            test "$app_identifier" = "$TEAM_ID.$bundle_id"
+            test "$get_task_allow" = false
+            ! /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$plist" >/dev/null 2>&1
+            ! /usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$plist" >/dev/null 2>&1
+            local groups
+            groups=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.security.application-groups' "$plist")
+            grep -Fq "$PRIVATE_APP_GROUP" <<< "$groups"
+            grep -Fq "$SHARED_APP_GROUP" <<< "$groups"
+            if [ "$bundle_id" = "$APP_BUNDLE_ID" ]; then
+              local containers services
+              containers=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-identifiers' "$plist")
+              services=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-services' "$plist")
+              grep -Fq "$ICLOUD_CONTAINER" <<< "$containers"
+              grep -Fq 'CloudDocuments' <<< "$services"
+              grep -Fq 'CloudKit' <<< "$services"
+              test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "$plist")" = production
+            fi
+            cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+            echo "${env_prefix}_PROFILE_SPECIFIER=$name" >> "$GITHUB_ENV"
+            echo "${env_prefix}_PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+            echo "Installed $role App Store profile ($uuid)"
+          }
 
-      # 5. Upload the .ipa as a workflow artifact for inspection /
-      #    re-upload, kept 7 days. Convenient when ASC drops a build.
-      - name: Archive build artifacts
+          install_profile main "$APP_BUNDLE_ID" "$MAIN_PROFILE_B64" MAIN
+          install_profile share "$SHARE_BUNDLE_ID" "$SHARE_PROFILE_B64" SHARE
+          install_profile widgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_B64" WIDGETS
+          echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+      - name: Signing and XcodeGen preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          common=(
+            DEVELOPMENT_TEAM="$TEAM_ID"
+            CODE_SIGN_STYLE=Manual
+            'CODE_SIGN_IDENTITY=Apple Distribution'
+            CHAVRUSANOTES_MAIN_PROFILE="$MAIN_PROFILE_SPECIFIER"
+            CHAVRUSANOTES_SHARE_PROFILE="$SHARE_PROFILE_SPECIFIER"
+            CHAVRUSANOTES_WIDGETS_PROFILE="$WIDGETS_PROFILE_SPECIFIER"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+          )
+          check_target() {
+            local target="$1" bundle_id="$2" profile="$3" entitlements="$4"
+            local log="$BUILD_DIR/logs/${target}-settings.log"
+            xcodebuild -project "$PROJECT_PATH" -target "$target" -configuration Release \
+              -destination 'generic/platform=iOS' "${common[@]}" -showBuildSettings | tee "$log"
+            grep -E "^[[:space:]]*PRODUCT_BUNDLE_IDENTIFIER = $bundle_id$" "$log"
+            grep -E "^[[:space:]]*DEVELOPMENT_TEAM = $TEAM_ID$" "$log"
+            grep -F "PROVISIONING_PROFILE_SPECIFIER = $profile" "$log"
+            grep -F "CODE_SIGN_ENTITLEMENTS = $entitlements" "$log"
+          }
+          check_target Pinkha "$APP_BUNDLE_ID" "$MAIN_PROFILE_SPECIFIER" Sources/Pinkha.entitlements
+          check_target ChavrusaNotesShare "$SHARE_BUNDLE_ID" "$SHARE_PROFILE_SPECIFIER" Extensions/Share/ChavrusaNotesShare.entitlements
+          check_target ChavrusaNotesWidgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_SPECIFIER" Extensions/Widgets/ChavrusaNotesWidgets.entitlements
+
+      - name: Archive signed Release app
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project "$PROJECT_PATH" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$BUILD_DIR/ChavrusaNotes.xcarchive" \
+            -derivedDataPath "$BUILD_DIR/DerivedData" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            CHAVRUSANOTES_MAIN_PROFILE="$MAIN_PROFILE_SPECIFIER" \
+            CHAVRUSANOTES_SHARE_PROFILE="$SHARE_PROFILE_SPECIFIER" \
+            CHAVRUSANOTES_WIDGETS_PROFILE="$WIDGETS_PROFILE_SPECIFIER" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            | tee "$BUILD_DIR/logs/archive.log"
+
+      - name: Export App Store Connect IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          export_options="$RUNNER_TEMP/ExportOptions.plist"
+          cat > "$export_options" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>stripSwiftSymbols</key><true/>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key><dict>
+              <key>$APP_BUNDLE_ID</key><string>$MAIN_PROFILE_SPECIFIER</string>
+              <key>$SHARE_BUNDLE_ID</key><string>$SHARE_PROFILE_SPECIFIER</string>
+              <key>$WIDGETS_BUNDLE_ID</key><string>$WIDGETS_PROFILE_SPECIFIER</string>
+            </dict>
+          </dict></plist>
+          PLIST
+          plutil -lint "$export_options"
+          mkdir -p "$BUILD_DIR/export"
+          xcodebuild -exportArchive \
+            -archivePath "$BUILD_DIR/ChavrusaNotes.xcarchive" \
+            -exportPath "$BUILD_DIR/export" \
+            -exportOptionsPlist "$export_options" \
+            | tee "$BUILD_DIR/logs/export.log"
+          raw_ipa=$(find "$BUILD_DIR/export" -maxdepth 1 -type f -name '*.ipa' -print -quit)
+          test -s "$raw_ipa"
+          final_ipa="$BUILD_DIR/export/ChavrusaNotes-$BUILD_NUMBER.ipa"
+          mv "$raw_ipa" "$final_ipa"
+          echo "IPA_PATH=$final_ipa" >> "$GITHUB_ENV"
+          shasum -a 256 "$final_ipa" | tee "$final_ipa.sha256"
+
+      - name: Verify archive, signatures, profiles, and entitlements
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          verify_dir="$RUNNER_TEMP/verify-ipa"
+          ditto -x -k "$IPA_PATH" "$verify_dir"
+          app=$(find "$verify_dir/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -d "$app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = "$APP_BUNDLE_ID"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Info.plist")" = ChavrusaNotes
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")" = "$BUILD_NUMBER"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+          verify_bundle() {
+            local bundle="$1" expected_id="$2" role="$3"
+            local entitlements="$BUILD_DIR/logs/${role}-signed-entitlements.plist"
+            local profile="$BUILD_DIR/logs/${role}-embedded-profile.plist"
+            codesign --display --entitlements - --xml "$bundle" > "$entitlements"
+            security cms -D -i "$bundle/embedded.mobileprovision" > "$profile"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$entitlements")" = "$TEAM_ID"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$entitlements")" = "$TEAM_ID.$expected_id"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$profile")" = "$TEAM_ID.$expected_id"
+            local groups
+            groups=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups' "$entitlements")
+            grep -Fq "$PRIVATE_APP_GROUP" <<< "$groups"
+            grep -Fq "$SHARED_APP_GROUP" <<< "$groups"
+          }
+
+          verify_bundle "$app" "$APP_BUNDLE_ID" main
+          share="$app/PlugIns/ChavrusaNotesShare.appex"
+          widgets="$app/PlugIns/ChavrusaNotesWidgets.appex"
+          test -d "$share" && test -d "$widgets"
+          codesign --verify --strict --verbose=2 "$share"
+          codesign --verify --strict --verbose=2 "$widgets"
+          verify_bundle "$share" "$SHARE_BUNDLE_ID" share
+          verify_bundle "$widgets" "$WIDGETS_BUNDLE_ID" widgets
+
+          main_entitlements="$BUILD_DIR/logs/main-signed-entitlements.plist"
+          containers=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.icloud-container-identifiers' "$main_entitlements")
+          services=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.icloud-services' "$main_entitlements")
+          grep -Fq "$ICLOUD_CONTAINER" <<< "$containers"
+          grep -Fq CloudDocuments <<< "$services"
+          grep -Fq CloudKit <<< "$services"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$main_entitlements")" = production
+          test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.siri' "$main_entitlements")" = true
+          echo "Signed IPA verification passed for the app and both extensions"
+
+      - name: Validate with App Store Connect
+        if: ${{ inputs.upload_to_testflight }}
+        run: |
+          xcrun altool --validate-app -f "$IPA_PATH" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Upload to App Store Connect and TestFlight
+        if: ${{ inputs.upload_to_testflight }}
+        run: |
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Verify uploaded build appears in TestFlight
+        if: ${{ inputs.upload_to_testflight }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet 'PyJWT[crypto]==2.10.1'
+          "$RUNNER_TEMP/asc-venv/bin/python" utilities/scripts/verify-testflight-build.py "$BUILD_NUMBER"
+
+      - name: Upload signed IPA and verification logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: testflight-build
+          name: ChavrusaNotes-signed-ipa-${{ env.BUILD_NUMBER }}
           path: |
-            build/Pinkha.ipa
-            build/*.dSYM.zip
-          retention-days: 7
-          if-no-files-found: ignore
+            ${{ env.IPA_PATH }}
+            ${{ env.IPA_PATH }}.sha256
+            ${{ env.BUILD_DIR }}/ChavrusaNotes.xcarchive/dSYMs
+            ${{ env.BUILD_DIR }}/logs
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove temporary signing material
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${SIGNING_KEYCHAIN:-}" ]; then security delete-keychain "$SIGNING_KEYCHAIN" || true; fi
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${MAIN_PROFILE_UUID:-missing}.mobileprovision"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${SHARE_PROFILE_UUID:-missing}.mobileprovision"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${WIDGETS_PROFILE_UUID:-missing}.mobileprovision"
+          rm -f "${ASC_KEY_PATH:-$RUNNER_TEMP/missing-asc-key}"

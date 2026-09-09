@@ -131,9 +131,9 @@ resolve_app_path() {
 
     SIM_APP=$(resolve_app_path "id=$SIM_UDID" || true)
     if [[ -n "$SIM_APP" ]]; then
-        xcrun simctl terminate "$SIM_UDID" com.gloiiire.pinkha 2>/dev/null || true
+        xcrun simctl terminate "$SIM_UDID" com.itorah.chavrusanotes 2>/dev/null || true
         xcrun simctl install "$SIM_UDID" "$SIM_APP"
-        xcrun simctl launch "$SIM_UDID" com.gloiiire.pinkha >/dev/null
+        xcrun simctl launch "$SIM_UDID" com.itorah.chavrusanotes >/dev/null
         echo "OK Launched on simulator."
     fi
 fi
@@ -148,7 +148,7 @@ if [[ $HAVE_DEVICE -eq 1 ]]; then
     DEV_APP=$(resolve_app_path "id=$DEVICE_ID" || true)
     if [[ -n "$DEV_APP" ]]; then
         xcrun devicectl device install app --device "$DEVICE_ID" "$DEV_APP" >/dev/null
-        xcrun devicectl device process launch --device "$DEVICE_ID" com.gloiiire.pinkha >/dev/null
+        xcrun devicectl device process launch --device "$DEVICE_ID" com.itorah.chavrusanotes >/dev/null
         echo "OK Launched on iPhone."
     fi
 fi

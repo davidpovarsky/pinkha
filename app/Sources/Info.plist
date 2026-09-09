@@ -14,6 +14,8 @@
     <string>6.0</string>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>ChavrusaNotes</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -44,10 +46,10 @@
         <dict>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>pinkha</string>
+                <string>chavrusanotes</string>
             </array>
             <key>CFBundleURLName</key>
-            <string>com.gloiiire.pinkha</string>
+            <string>com.itorah.chavrusanotes</string>
         </dict>
     </array>
     <key>UILaunchScreen</key>
@@ -69,12 +71,21 @@
     <array>
         <dict>
             <key>UIApplicationShortcutItemType</key>
-            <string>com.gloiiire.pinkha.new-note</string>
+            <string>com.itorah.chavrusanotes.new-note</string>
             <key>UIApplicationShortcutItemTitle</key>
             <string>New Note</string>
             <key>UIApplicationShortcutItemIconType</key>
             <string>UIApplicationShortcutIconTypeCompose</string>
         </dict>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>com.itorah.chavrusanotes.library</string>
+        <string>com.itorah.chavrusanotes.note</string>
     </array>
     <key>CFBundleLocalizations</key>
     <array>
@@ -102,19 +113,19 @@
     </array>
 	<!--
 	  Rend le conteneur iCloud visible dans l'app Fichiers sous le nom
-	  « Pinkha ». Sans cette déclaration le dossier existe mais reste
+	  « ChavrusaNotes ». Sans cette déclaration le dossier existe mais reste
 	  invisible : l'utilisateur ne pourrait récupérer ses sauvegardes que
 	  depuis l'app — or l'app est justement ce qui vient de perdre ses
 	  données.
 	-->
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>iCloud.com.gloiiire.pinkha</key>
+		<key>iCloud.com.itorah.chavrusanotes</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
 			<key>NSUbiquitousContainerName</key>
-			<string>Pinkha</string>
+			<string>ChavrusaNotes</string>
 			<key>NSUbiquitousContainerSupportedFolderLevels</key>
 			<string>Any</string>
 		</dict>

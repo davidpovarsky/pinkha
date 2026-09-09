@@ -8,7 +8,7 @@ public enum Keychain {
 
     /// Account key prefix to avoid collisions with other apps sharing the same
     /// access group. Each call site picks its own suffix (e.g. "notion.token").
-    private static let service = "com.gloiiire.pinkha"
+    private static let service = "com.itorah.chavrusanotes"
 
     /// Persist `value` under `key`. Overwrites any previous entry.
     /// Returns `true` on success. Logs but does not throw on failure — the

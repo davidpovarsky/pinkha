@@ -5,7 +5,7 @@ import PinkhaComposer
 extension Notification.Name {
     /// Fired when iOS hands the app a Home Screen Quick Action
     /// (long-press the app icon). Userinfo carries the shortcut
-    /// `type` under the `"type"` key, e.g. `com.gloiiire.pinkha.new-note`.
+    /// `type` under the `"type"` key, e.g. `com.itorah.chavrusanotes.new-note`.
     static let pinkhaQuickAction = Notification.Name("PinkhaQuickAction")
 }
 

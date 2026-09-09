@@ -3,9 +3,6 @@
 # Xcode generate step, and reading the same value from two places
 # would let them drift silently.
 
-app_identifier("com.gloiiire.pinkha")
-apple_dev_portal_id("ybikouta@icloud.com") # Apple ID email used to sign in
-itunes_connect_id("ybikouta@icloud.com")   # = same address for solo dev
-
-team_id("N49VNC2G57")
-itc_team_id("N49VNC2G57")
+app_identifier("com.itorah.chavrusanotes")
+team_id("NA6HPWARQ2")
+itc_team_id("NA6HPWARQ2")

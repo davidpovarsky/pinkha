@@ -157,7 +157,7 @@ fi
 echo "→ Installing on device ${DEVICE_ID}…"
 xcrun devicectl device install app --device "$DEVICE_ID" "$APP_PATH" >/dev/null
 
-echo "→ Launching com.gloiiire.pinkha…"
-xcrun devicectl device process launch --device "$DEVICE_ID" com.gloiiire.pinkha >/dev/null
+echo "→ Launching com.itorah.chavrusanotes…"
+xcrun devicectl device process launch --device "$DEVICE_ID" com.itorah.chavrusanotes >/dev/null
 
 echo "✓ Pinkha lancée sur l'iPhone."
