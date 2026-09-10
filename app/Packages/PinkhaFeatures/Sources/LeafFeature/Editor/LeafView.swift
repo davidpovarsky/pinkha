@@ -49,7 +49,7 @@ public struct LeafView: View {
     @State var torahSearchKind: TorahAssociationKind?
     @State var torahPreviewRevision = 0
     @State var torahSourceQuotes: [String: TorahAssociation] = [:]
-    @State private var torahErrorMessage: String?
+    @State var torahErrorMessage: String?
     @State private var torahInspectorCoordinator = TorahInspectorCoordinator()
     @State private var torahInsertionBridge = TorahDocumentInsertionBridge()
     @State var torahRepository: TorahInspectorRepository?
@@ -997,8 +997,7 @@ public struct LeafView: View {
         // target leaf loads from SQLite without any extra plumbing.
         .navigationDestination(item: $pushedLeafId) { leafId in
             LeafView(vm: tabManager.open(leafId: leafId, api: vm.api),
-                     onDisappear: nil,
-                     onOpenTorahInspector: onOpenTorahInspector)
+                     onDisappear: nil)
                 // Mention-link pushes are editorial navigation — a Books-style
                 // crossfade reads better than a hard slide. The list-driven
                 // push in `LibraryView` keeps its zoom (Notes-style tile
