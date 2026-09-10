@@ -158,6 +158,8 @@ targets:
         product: ImportFeature
       - package: PinkhaFeatures
         product: SearchFeature
+      - package: PinkhaFeatures
+        product: TorahKnowledgeFeature
       - package: Sentry
         product: Sentry
       - target: ChavrusaNotesShare
@@ -232,6 +234,8 @@ targets:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: NA6HPWARQ2
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/ChavrusaNotes.app/ChavrusaNotes
+        BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
       - target: Pinkha
 
@@ -248,6 +252,8 @@ targets:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: NA6HPWARQ2
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/ChavrusaNotes.app/ChavrusaNotes
+        BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
       - target: Pinkha
 
