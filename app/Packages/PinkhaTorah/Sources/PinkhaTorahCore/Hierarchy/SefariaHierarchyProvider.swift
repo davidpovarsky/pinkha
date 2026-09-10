@@ -12,8 +12,6 @@ import Foundation
 public struct SefariaHierarchyProvider: TorahHierarchyProvider {
     public let providerID = "sefaria"
     private let client: SefariaClient
-
-    private let client: SefariaClient
     private let store: TorahStore?
 
     public init(client: SefariaClient = SefariaClient(), store: TorahStore? = nil) {
