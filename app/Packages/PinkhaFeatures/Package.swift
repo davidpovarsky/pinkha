@@ -17,11 +17,12 @@ let package = Package(
     name: "PinkhaFeatures",
     platforms: [.iOS("26.0"), .macOS("14.0")],
     products: [
-        .library(name: "LeafFeature",    targets: ["LeafFeature"]),
-        .library(name: "BookFeature",    targets: ["BookFeature"]),
-        .library(name: "LibraryFeature", targets: ["LibraryFeature"]),
-        .library(name: "ImportFeature",  targets: ["ImportFeature"]),
-        .library(name: "SearchFeature",  targets: ["SearchFeature"])
+        .library(name: "LeafFeature",           targets: ["LeafFeature"]),
+        .library(name: "BookFeature",           targets: ["BookFeature"]),
+        .library(name: "LibraryFeature",        targets: ["LibraryFeature"]),
+        .library(name: "ImportFeature",         targets: ["ImportFeature"]),
+        .library(name: "SearchFeature",         targets: ["SearchFeature"]),
+        .library(name: "TorahKnowledgeFeature", targets: ["TorahKnowledgeFeature"])
     ],
     dependencies: [
         .package(path: "../PinkhaFFI"),
@@ -92,6 +93,17 @@ let package = Package(
                 .product(name: "PinkhaComposer",     package: "PinkhaComposer")
             ],
             path: "Sources/SearchFeature"
+        ),
+        .target(
+            name: "TorahKnowledgeFeature",
+            dependencies: [
+                "LeafFeature",
+                .product(name: "PinkhaCore",         package: "PinkhaCore"),
+                .product(name: "PinkhaDesignSystem", package: "PinkhaDesignSystem"),
+                .product(name: "PinkhaComposer",     package: "PinkhaComposer"),
+                .product(name: "PinkhaTorahCore",   package: "PinkhaTorah")
+            ],
+            path: "Sources/TorahKnowledgeFeature"
         )
     ]
 )

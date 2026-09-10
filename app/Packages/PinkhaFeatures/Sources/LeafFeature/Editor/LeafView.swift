@@ -49,21 +49,26 @@ public struct LeafView: View {
     @State var torahSearchKind: TorahAssociationKind?
     @State var torahPreviewRevision = 0
     @State var torahSourceQuotes: [String: TorahAssociation] = [:]
-    @State var torahErrorMessage: String?
-    let onOpenTorahInspector: ((TorahInspectorSelection) -> Void)?
-    @Environment(TorahInspectorCoordinator.self) private var torahInspectorCoordinator: TorahInspectorCoordinator?
-    @Environment(TorahDocumentInsertionBridge.self) var torahInsertionBridge: TorahDocumentInsertionBridge?
+    @State private var torahErrorMessage: String?
+    @State private var torahInspectorCoordinator = TorahInspectorCoordinator()
+    @State private var torahInsertionBridge = TorahDocumentInsertionBridge()
+    @State var torahRepository: TorahInspectorRepository?
     @State var targetedDropBlockId: String? = nil
     @State private var pendingInspectorRequest: TorahInspectorSelection?
 
+    func getTorahRepository() -> TorahInspectorRepository? {
+        if let torahRepository { return torahRepository }
+        guard let path = store.activeDatabasePath,
+              let workspace = try? TorahWorkspace.application(databasePath: path) else { return nil }
+        let repo = TorahInspectorRepository(workspace: workspace)
+        torahRepository = repo
+        return repo
+    }
+
     func requestOpenTorahInspector(_ selection: TorahInspectorSelection, blockId: String? = nil) {
         let anchorBlockId = blockId ?? vm.activeBlockId
-        torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: anchorBlockId)
-        if let onOpenTorahInspector {
-            onOpenTorahInspector(selection)
-        } else if let torahInspectorCoordinator {
-            torahInspectorCoordinator.open(selection)
-        }
+        torahInsertionBridge.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: anchorBlockId)
+        torahInspectorCoordinator.open(selection)
     }
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
@@ -158,8 +163,7 @@ public struct LeafView: View {
     /// tab keeps its in-memory state).
     public init(vm: LeafViewModel,
          onDisappear: (() -> Void)? = nil,
-         scrollToBlockId: String? = nil,
-         onOpenTorahInspector: ((TorahInspectorSelection) -> Void)? = nil) {
+         scrollToBlockId: String? = nil) {
         let leafId = vm.leafId
         let lockKey = Self.lockKeyFor(leafId: leafId)
         let iconKey = Self.iconKeyFor(leafId: leafId)
@@ -170,7 +174,6 @@ public struct LeafView: View {
         self.iconKey = iconKey
         self.onDisappear = onDisappear
         self.scrollToBlockId = scrollToBlockId
-        self.onOpenTorahInspector = onOpenTorahInspector
     }
 
     public var body: some View {
@@ -249,6 +252,29 @@ public struct LeafView: View {
                 }
             }
         }
+        .inspector(isPresented: Binding(
+            get: { torahInspectorCoordinator.isPresented },
+            set: { if !$0 { torahInspectorCoordinator.close() } }
+        )) {
+            if let selection = torahInspectorCoordinator.selection, let repo = getTorahRepository() {
+                TorahInspectorView(
+                    repository: repo,
+                    selection: selection,
+                    onClose: { torahInspectorCoordinator.close() },
+                    onInsertSegment: { transfer in
+                        Task { @MainActor in
+                            try? await torahInsertionBridge.insert(transfer)
+                        }
+                    }
+                )
+                .id(selection.id)
+                .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .environment(torahInspectorCoordinator)
+        .environment(torahInsertionBridge)
     }
 
     // ── Main list ────────────────────────────────────────────────────────────
@@ -608,8 +634,8 @@ public struct LeafView: View {
         .onAppear {
             vm.load()
             composer.currentContext = .leaf(id: vm.leafId)
-            torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: vm.activeBlockId)
-            torahInsertionBridge?.onInsert = { [weak vm] transfer, anchor in
+            torahInsertionBridge.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: vm.activeBlockId)
+            torahInsertionBridge.onInsert = { [weak vm] transfer, anchor in
                 guard let vm, let path = store.activeDatabasePath else { return }
                 let targetBlockId = anchor?.blockId ?? vm.activeBlockId
                 try await vm.insertTorahSourceSnapshot(
@@ -653,7 +679,7 @@ public struct LeafView: View {
         }
         .onChange(of: vm.activeBlockId) { _, newBlockId in
             if let newBlockId {
-                torahInsertionBridge?.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: newBlockId)
+                torahInsertionBridge.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: newBlockId)
             }
         }
         // Typing is persisted lazily: block edits land 300 ms after the last
@@ -668,8 +694,8 @@ public struct LeafView: View {
             vm.saveTitle()
         }
         .onDisappear {
-            if torahInsertionBridge?.activeAnchor?.leafId == vm.leafId {
-                torahInsertionBridge?.onInsert = nil
+            if torahInsertionBridge.activeAnchor?.leafId == vm.leafId {
+                torahInsertionBridge.onInsert = nil
             }
             vm.flushAllBursts()
             vm.saveTitle()

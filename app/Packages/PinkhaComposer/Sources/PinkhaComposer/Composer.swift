@@ -108,7 +108,7 @@ public final class Composer {
     /// we ever persist the last-selected tab; the enum itself is
     /// `Hashable` so it works as a `TabView` selection binding.
     public enum TabKind: String, Hashable, Codable {
-        case leaves, books, inbox, search
+        case leaves, books, inbox, search, torah
     }
 
     public enum CreateMode { case leaf, book }

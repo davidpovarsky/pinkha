@@ -748,18 +748,27 @@ public struct EditorFocusRequestState: Sendable {
             guard let host = tv.nearestViewController else { return }
             controller = ReferenceCommandPopoverController()
             controller.modalPresentationStyle = .popover
+            controller.onPreview = parent.onReferenceCommandPreview
             controller.onPick = { [weak self] candidate in
                 guard let self else { return }
                 let callback = self.parent.onReferenceCommandPick
                 self.endReferenceCommandSession()
                 callback?(candidate)
             }
+            controller.onAction = { [weak self] action in
+                guard let self else { return }
+                let callback = self.parent.onReferenceCommandAction
+                self.endReferenceCommandSession()
+                callback?(action)
+            }
             guard let popover = controller.popoverPresentationController else { return }
             popover.delegate = self; popover.sourceView = tv; popover.permittedArrowDirections = [.up, .down]
+            popover.passthroughViews = [tv]
             referencePopover = controller
             updateReferenceAnchor(in: tv)
             host.present(controller, animated: true)
         }
+        controller.onPreview = parent.onReferenceCommandPreview
         controller.update(values)
         updateReferenceAnchor(in: tv)
     }

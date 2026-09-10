@@ -57,6 +57,7 @@
 		813F95C5C1BA14EC8CE7FE6C /* PinkhaRichText in Frameworks */ = {isa = PBXBuildFile; productRef = 5C3D37A779DD534887934AAB /* PinkhaRichText */; };
 		8407A733A7EFAAF57A90FCB9 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 239C11BB7B359FC141B27B3C /* Sentry */; };
 		8458B3187E4A73BC3010F518 /* SearchFeature in Frameworks */ = {isa = PBXBuildFile; productRef = CB27A7D3DA9FAC4AF81AF319 /* SearchFeature */; };
+		A1B2C3D4E5F60718A9B0C1D2 /* TorahKnowledgeFeature in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60718A9B0C1D3 /* TorahKnowledgeFeature */; };
 		89E9A7EE05F907BBD55CB712 /* PinkhaDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 02A56EFCFA9BE0B5D5555148 /* PinkhaDesignSystem */; };
 		8D5FA2C87A10F1A5515A71FF /* BlockContentFfiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A6032BCBFCFE419E656DCE /* BlockContentFfiTests.swift */; };
 		8EDE253B7197FBC5C68EBBE1 /* DatabaseApiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D790938BD86DCD84018B0A63 /* DatabaseApiTests.swift */; };
@@ -225,6 +226,7 @@
 				B1CC663C63066A3A8AA2C30E /* LibraryFeature in Frameworks */,
 				0FCA3499700A2CFF25EB841D /* ImportFeature in Frameworks */,
 				8458B3187E4A73BC3010F518 /* SearchFeature in Frameworks */,
+				A1B2C3D4E5F60718A9B0C1D2 /* TorahKnowledgeFeature in Frameworks */,
 				8407A733A7EFAAF57A90FCB9 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -505,6 +507,7 @@
 				B0646CF4E56693CA472EB748 /* LibraryFeature */,
 				39EBD01717E41D1EA2F85EA3 /* ImportFeature */,
 				CB27A7D3DA9FAC4AF81AF319 /* SearchFeature */,
+				A1B2C3D4E5F60718A9B0C1D3 /* TorahKnowledgeFeature */,
 				239C11BB7B359FC141B27B3C /* Sentry */,
 			);
 			productName = Pinkha;
@@ -1129,6 +1132,10 @@
 		FF83B8C3CF8B8AE46DE62FFB /* LeafFeature */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = LeafFeature;
+		};
+		A1B2C3D4E5F60718A9B0C1D3 /* TorahKnowledgeFeature */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TorahKnowledgeFeature;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -8,6 +8,7 @@ import SearchFeature
 import BookFeature
 import LibraryFeature
 import ImportFeature
+import TorahKnowledgeFeature
 
 // ── Root view: 4-tab layout ──────────────────────────────────────────────────
 
@@ -286,6 +287,10 @@ struct ContentView: View {
             Tab("Books", systemImage: "book.fill",
                 value: Composer.TabKind.books) {
                 BooksHomeView(store: store)
+            }
+            Tab("תורה", systemImage: "books.vertical",
+                value: Composer.TabKind.torah) {
+                TorahKnowledgeView()
             }
             Tab("Inbox",
                 systemImage: store.hasInboxNotification ? "tray.badge.fill" : "tray.fill",

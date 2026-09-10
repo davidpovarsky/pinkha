@@ -24,20 +24,14 @@ public struct QuoteRowView: View {
                 ?? base.fontDescriptor
             return UIFont(descriptor: descriptor, size: baseSize)
         }()
-        HStack(alignment: .top, spacing: 0) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.secondary.opacity(0.4))
-                .frame(width: 3)
-                .padding(.vertical, 6)
+        QuoteChrome {
             BlockTextEditor(
                 block: $block, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset,
                 placeholder: "Quote…",
                 baseFont: italic,
                 extraAttrs: typography.attributedAttributes(baseFontSize: baseSize),
                 cb: cb)
-            .padding(.leading, 14)
         }
-        .padding(.vertical, 4)
     }
 }
 

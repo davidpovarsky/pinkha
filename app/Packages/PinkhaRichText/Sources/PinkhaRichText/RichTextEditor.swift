@@ -116,6 +116,8 @@ public struct RichTextEditor: UIViewRepresentable {
     var onOpenInternalLeaf: ((String) -> Void)? = nil
     var onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil
     var onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
+    var onReferenceCommandPreview: (@MainActor (ReferenceCommandCandidate) async -> ReferenceCommandPreviewData?)? = nil
+    var onReferenceCommandAction: (@MainActor (ReferenceCommandPickAction) -> Void)? = nil
 
     public init(
         spans: Binding<[InlineTextFfi]>,
@@ -151,7 +153,9 @@ public struct RichTextEditor: UIViewRepresentable {
         onMentionLookup: (() -> [MentionCandidate])? = nil,
         onOpenInternalLeaf: ((String) -> Void)? = nil,
         onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil,
-        onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
+        onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil,
+        onReferenceCommandPreview: (@MainActor (ReferenceCommandCandidate) async -> ReferenceCommandPreviewData?)? = nil,
+        onReferenceCommandAction: (@MainActor (ReferenceCommandPickAction) -> Void)? = nil
     ) {
         self._spans = spans
         self._isFocused = isFocused
@@ -187,6 +191,8 @@ public struct RichTextEditor: UIViewRepresentable {
         self.onOpenInternalLeaf = onOpenInternalLeaf
         self.onReferenceCommandLookup = onReferenceCommandLookup
         self.onReferenceCommandPick = onReferenceCommandPick
+        self.onReferenceCommandPreview = onReferenceCommandPreview
+        self.onReferenceCommandAction = onReferenceCommandAction
     }
 
     public func makeUIView(context: Context) -> ExpandingTextView {

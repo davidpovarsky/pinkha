@@ -99,6 +99,8 @@ public struct BlockCallbacks {
     public var onOpenTorahReference: ((TorahInspectorSelection) -> Void)? = nil
     public var onReferenceCommandLookup: (@MainActor (String) async -> [ReferenceCommandCandidate])? = nil
     public var onReferenceCommandPick: (@MainActor (ReferenceCommandCandidate) -> Void)? = nil
+    public var onReferenceCommandPreview: (@MainActor (ReferenceCommandCandidate) async -> ReferenceCommandPreviewData?)? = nil
+    public var onReferenceCommandAction: (@MainActor (ReferenceCommandPickAction) -> Void)? = nil
     /// Accent color the row should paint its accented affordances with
     /// (todo checkmark, etc.). Resolved at the LeafView level so a
     /// per-doc accent overrides the global setting; the default falls
@@ -178,7 +180,9 @@ public struct BlockTextEditor: View {
             onMentionLookup: cb.onMentionLookup,
             onOpenInternalLeaf: cb.onOpenInternalLeaf,
             onReferenceCommandLookup: cb.onReferenceCommandLookup,
-            onReferenceCommandPick: cb.onReferenceCommandPick)
+            onReferenceCommandPick: cb.onReferenceCommandPick,
+            onReferenceCommandPreview: cb.onReferenceCommandPreview,
+            onReferenceCommandAction: cb.onReferenceCommandAction)
         .autoFocusIfNeeded(blockId: block.id, autoFocusId: $autoFocusId,
                               autoFocusOffset: $autoFocusOffset, cursorAt: $cursorAt, focused: $focused)
         .onChange(of: focused) { _, f in if f { cb.onFocus?() } }
@@ -252,7 +256,7 @@ public struct BlockRowView: View {
                 HeadingRowView(block: $block, level: level, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset, cb: cb)
             case .quote(let icon, _):
                 if icon.isEmpty, let association = cb.sourceQuoteAssociation, let onOpen = cb.onOpenTorahReference {
-                    TorahSourceQuoteView(association: association, text: block.spans.map(\.content).joined(), onOpen: onOpen)
+                    TorahSourceQuoteRowView(association: association, text: block.spans.map(\.content).joined(), onOpen: onOpen)
                 } else if icon.isEmpty {
                     QuoteRowView(block: $block, autoFocusId: $autoFocusId, autoFocusOffset: $autoFocusOffset, cb: cb)
                 } else {

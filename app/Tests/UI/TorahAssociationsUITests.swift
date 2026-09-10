@@ -133,6 +133,30 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertEqual(app.buttons["torahAssociationKindTopic"].label, "נושא")
     }
 
+    func testInspectorLifecycleDismissesWhenLeafPopped() {
+        let app = launchLeaf()
+        addFromLeaf("Ref", query: "ראש הש", resultIdentifier: "torahReferenceResult.Rosh Hashanah 16b", app: app)
+        let refPreview = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "torahLeafPreviewRow.")).firstMatch
+        XCTAssertTrue(refPreview.waitForExistence(timeout: 5))
+
+        refPreview.press(forDuration: 1.0)
+        let openInspector = app.buttons["Open in Inspector"]
+        XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
+        openInspector.tap()
+
+        let inspectorClose = app.buttons["Close"]
+        let inspectorTitle = app.staticTexts["ראש השנה ט״ז ב׳"]
+        let inspectorExists = inspectorClose.waitForExistence(timeout: 5) || inspectorTitle.waitForExistence(timeout: 5)
+        XCTAssertTrue(inspectorExists)
+
+        let backButton = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
+        backButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Seeded Leaf 1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(inspectorClose.exists)
+    }
+
     override func tearDown() {
         if testRun?.hasSucceeded == false {
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

@@ -39,6 +39,19 @@ public struct TorahInspectorView: View {
         }
     }
 
+    public init(
+        repository: TorahInspectorRepository,
+        selection: TorahInspectorSelection,
+        onClose: @escaping () -> Void = {},
+        onInsertSegment: @escaping (TorahSourceTransfer) -> Void = { _ in }
+    ) {
+        self.selection = selection
+        self.onClose = onClose
+        self.onInsertSegment = onInsertSegment
+        _repository = State(initialValue: repository)
+    }
+
+
     public var body: some View {
         if let repository {
             TorahInspectorUI.TorahInspectorView(

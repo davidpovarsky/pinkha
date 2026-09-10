@@ -206,6 +206,56 @@ public actor TorahStore {
         return result
     }
 
+    // MARK: - Reverse-association queries (Torah knowledge tab)
+
+    /// Grouped canonical keys with counts and labels for a given association kind.
+    /// Returns tuples of (canonicalKey, labelHe, leafCount) ordered by count descending.
+    public func distinctAssociationGroups(kind: TorahAssociationKind) throws -> [(canonicalKey: String, labelHe: String, leafCount: Int)] {
+        let sql = """
+        SELECT canonical_key, label_he, COUNT(DISTINCT leaf_id) as leaf_count
+        FROM torah_associations WHERE kind = ?
+        GROUP BY canonical_key
+        ORDER BY leaf_count DESC, label_he
+        """
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        bind(kind.rawValue, at: 1, to: statement)
+        var result: [(canonicalKey: String, labelHe: String, leafCount: Int)] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            result.append((
+                canonicalKey: text(statement, 0),
+                labelHe: text(statement, 1),
+                leafCount: Int(sqlite3_column_int(statement, 2))
+            ))
+        }
+        return result
+    }
+
+    /// Distinct leaf IDs associated with a specific canonical key and kind.
+    public func leafIDs(forCanonicalKey key: String, kind: TorahAssociationKind) throws -> [String] {
+        let sql = "SELECT DISTINCT leaf_id FROM torah_associations WHERE canonical_key = ? AND kind = ? ORDER BY created_at DESC"
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        bind(key, at: 1, to: statement); bind(kind.rawValue, at: 2, to: statement)
+        var result: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW { result.append(text(statement, 0)) }
+        return result
+    }
+
+    /// All (leafID, canonicalKey, labelHe) tuples for a given kind, for batch hierarchy building.
+    /// Ordered by canonical_key for efficient grouping.
+    public func allLeafAssociationPairs(kind: TorahAssociationKind) throws -> [(leafID: String, canonicalKey: String, labelHe: String)] {
+        let sql = "SELECT DISTINCT leaf_id, canonical_key, label_he FROM torah_associations WHERE kind = ? ORDER BY canonical_key, leaf_id"
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        bind(kind.rawValue, at: 1, to: statement)
+        var result: [(leafID: String, canonicalKey: String, labelHe: String)] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            result.append((leafID: text(statement, 0), canonicalKey: text(statement, 1), labelHe: text(statement, 2)))
+        }
+        return result
+    }
+
     private func prepare(_ sql: String) throws -> OpaquePointer {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw lastError() }

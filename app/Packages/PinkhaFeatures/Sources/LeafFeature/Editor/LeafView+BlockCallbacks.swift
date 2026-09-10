@@ -72,13 +72,31 @@ public extension LeafView {
                 guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
                 let workspace = try TorahWorkspace.application(databasePath: path)
                 let resolved = try await workspace.resolveReference(candidate.id)
-                guard resolved.isEmbeddableSource else { throw TorahError.referenceTooBroad }
+
+                // Broad valid reference → open Inspector directly (Item E).
+                // Do not show a dead-end error for broad refs like a whole tractate.
+                guard resolved.isEmbeddableSource else {
+                    let inspectorRef = resolved.firstAvailableSectionRef ?? resolved.canonical
+                    requestOpenTorahInspector(
+                        TorahInspectorSelection(providerID: "sefaria", canonicalRef: inspectorRef),
+                        blockId: blockID
+                    )
+                    return
+                }
+
                 let document = try await workspace.fetchText(reference: resolved.canonical)
                 let maximumSourceSegments = 200
                 let maximumSourceCharacters = 100_000
                 guard document.segments.count <= maximumSourceSegments,
                       document.segments.reduce(0, { $0 + $1.text.count }) <= maximumSourceCharacters
-                else { throw TorahError.referenceTooBroad }
+                else {
+                    // Too large to embed — also route to Inspector.
+                    requestOpenTorahInspector(
+                        TorahInspectorSelection(providerID: "sefaria", canonicalRef: resolved.canonical),
+                        blockId: blockID
+                    )
+                    return
+                }
                 let target = TorahTarget.block(leafID: vm.leafId, blockID: blockID)
                 try await workspace.addSourceQuote(resolved, document: document, rawInput: candidate.title, to: target)
                 guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
@@ -89,6 +107,39 @@ public extension LeafView {
             } catch is CancellationError {} catch { torahErrorMessage = TorahStrings.message(for: error) }
         }
     }
+
+    func insertTorahSourceExcerpt(candidate: ReferenceCommandCandidate, excerptText: String, range: NSRange, blockID: String) {
+        guard let path = store.activeDatabasePath else { torahErrorMessage = TorahStrings.storageUnavailable; return }
+        Task { @MainActor in
+            do {
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                let workspace = try TorahWorkspace.application(databasePath: path)
+                let resolved = try await workspace.resolveReference(candidate.id)
+
+                let repo = getTorahRepository()
+                let document: TorahTextDocument
+                if let repo {
+                    document = try await repo.document(for: resolved.canonical, providerID: "sefaria")
+                } else {
+                    document = try await workspace.fetchText(reference: resolved.canonical)
+                }
+
+                let target = TorahTarget.block(leafID: vm.leafId, blockID: blockID)
+                let excerpt = TorahSourceQuoteExcerpt(
+                    selectedText: excerptText,
+                    characterOffset: range.location,
+                    characterLength: range.length
+                )
+                try await workspace.addSourceQuote(resolved, document: document, rawInput: candidate.title, excerpt: excerpt, to: target)
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                vm.convertBlockContent(id: blockID, to: .quote(icon: "", text: [InlineTextFfi(content: excerptText, styles: [])]))
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+            } catch is CancellationError {} catch { torahErrorMessage = TorahStrings.message(for: error) }
+        }
+    }
+
+
 
     /// Builds the full row for a block in the List: selection HStack + content + gestures.
     @ViewBuilder
@@ -376,6 +427,57 @@ public extension LeafView {
             },
             onReferenceCommandPick: { candidate in
                 insertTorahSourceQuote(candidate: candidate, blockID: block.id)
+            },
+            onReferenceCommandPreview: { candidate in
+                guard let path = store.activeDatabasePath,
+                      let workspace = try? TorahWorkspace.application(databasePath: path) else { return nil }
+                do {
+                    let resolved = try await workspace.resolveReference(candidate.id)
+                    if !resolved.isEmbeddableSource {
+                        return ReferenceCommandPreviewData(
+                            canonicalRef: resolved.canonical,
+                            labelHe: resolved.labelHe,
+                            previewText: "",
+                            isEmbeddable: false
+                        )
+                    }
+                    let repo = getTorahRepository()
+                    let document: TorahTextDocument
+                    if let repo {
+                        document = try await repo.document(for: resolved.canonical, providerID: "sefaria")
+                    } else {
+                        document = try await workspace.fetchText(reference: resolved.canonical)
+                    }
+                    let previewText = document.segments.map(\.text).joined(separator: "\n")
+                    return ReferenceCommandPreviewData(
+                        canonicalRef: resolved.canonical,
+                        labelHe: resolved.labelHe,
+                        previewText: previewText,
+                        isEmbeddable: true,
+                        rawDocument: document
+                    )
+                } catch {
+                    return nil
+                }
+            },
+            onReferenceCommandAction: { action in
+                switch action {
+                case .insertFull(let candidate):
+                    insertTorahSourceQuote(candidate: candidate, blockID: block.id)
+                case .insertExcerpt(let candidate, let selectedText, let range):
+                    insertTorahSourceExcerpt(candidate: candidate, excerptText: selectedText, range: range, blockID: block.id)
+                case .openInspector(let candidate):
+                    guard let path = store.activeDatabasePath,
+                          let workspace = try? TorahWorkspace.application(databasePath: path) else { return }
+                    Task { @MainActor in
+                        let resolved = try? await workspace.resolveReference(candidate.id)
+                        let ref = resolved?.firstAvailableSectionRef ?? resolved?.canonical ?? candidate.id
+                        requestOpenTorahInspector(
+                            TorahInspectorSelection(providerID: "sefaria", canonicalRef: ref),
+                            blockId: block.id
+                        )
+                    }
+                }
             },
             accentColor: effectiveAccentColor,
             themeForegroundColor: effectiveTheme.effectiveForegroundColor(darkVariant: effectiveThemeDarkVariant),

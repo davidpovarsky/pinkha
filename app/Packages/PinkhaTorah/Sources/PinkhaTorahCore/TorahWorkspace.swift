@@ -89,9 +89,20 @@ public final class TorahWorkspace {
             labelHe: resolved.labelHe, labelEn: resolved.labelEn, rawInput: rawInput,
             providerPayload: resolved.payload))
     }
-    public func addSourceQuote(_ resolved: ResolvedReference, document: TorahTextDocument, rawInput: String, to target: TorahTarget) async throws {
+    public func addSourceQuote(
+        _ resolved: ResolvedReference,
+        document: TorahTextDocument,
+        rawInput: String,
+        excerpt: TorahSourceQuoteExcerpt? = nil,
+        to target: TorahTarget
+    ) async throws {
         let provider = try registry.reference().providerID
-        let provenance = TorahSourceQuoteProvenance(canonicalRef: resolved.canonical, referenceProviderPayload: resolved.payload, textDocument: document)
+        let provenance = TorahSourceQuoteProvenance(
+            canonicalRef: resolved.canonical,
+            referenceProviderPayload: resolved.payload,
+            textDocument: document,
+            excerpt: excerpt
+        )
         let payload = (try? String(decoding: JSONEncoder().encode(provenance), as: UTF8.self)) ?? resolved.payload
         try await store.add(TorahAssociation(target: target, kind: .ref, role: .sourceQuote,
             providerID: provider, externalID: resolved.canonical, canonicalKey: resolved.canonical,
@@ -116,4 +127,22 @@ public final class TorahWorkspace {
         let reference = try await store.associations(for: target).first(where: { $0.kind == .ref })
         return reference.map { TorahLexicalContext(canonicalReference: $0.canonicalKey) }
     }
+
+    // MARK: - Reverse-association queries (Torah knowledge tab)
+
+    /// Grouped canonical keys with counts for a given association kind.
+    public func distinctAssociationGroups(kind: TorahAssociationKind) async throws -> [(canonicalKey: String, labelHe: String, leafCount: Int)] {
+        try await store.distinctAssociationGroups(kind: kind)
+    }
+
+    /// Distinct leaf IDs associated with a specific canonical key and kind.
+    public func leafIDs(forCanonicalKey key: String, kind: TorahAssociationKind) async throws -> [String] {
+        try await store.leafIDs(forCanonicalKey: key, kind: kind)
+    }
+
+    /// All (leafID, canonicalKey, labelHe) tuples for a given kind.
+    public func allLeafAssociationPairs(kind: TorahAssociationKind) async throws -> [(leafID: String, canonicalKey: String, labelHe: String)] {
+        try await store.allLeafAssociationPairs(kind: kind)
+    }
 }
+

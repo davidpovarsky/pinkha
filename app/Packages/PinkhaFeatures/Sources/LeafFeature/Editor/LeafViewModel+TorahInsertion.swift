@@ -12,7 +12,8 @@ public extension LeafViewModel {
     func insertBlockContent(
         content: BlockContentFfi,
         spans: [InlineTextFfi] = [],
-        afterId: String? = nil
+        afterId: String? = nil,
+        focusInsertedBlock: Bool = true
     ) throws -> String {
         let parent: String?
         let sibling: Int
@@ -57,8 +58,10 @@ public extension LeafViewModel {
         let at = min(insertionIndex, blocks.count)
         blocks.insert(newEditable, at: at)
         blockSnapshots[newId] = snapshotOf(newEditable)
-        autoFocusOffset = nil
-        autoFocusId = newId
+        if focusInsertedBlock {
+            autoFocusOffset = nil
+            autoFocusId = newId
+        }
 
         return newId
     }
@@ -82,7 +85,8 @@ public extension LeafViewModel {
         let newBlockId = try insertBlockContent(
             content: content,
             spans: [InlineTextFfi(content: transfer.text, styles: [])],
-            afterId: afterId
+            afterId: afterId,
+            focusInsertedBlock: false
         )
 
         // 2. Persist Torah association

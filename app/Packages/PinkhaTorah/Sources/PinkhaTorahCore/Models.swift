@@ -132,14 +132,44 @@ public struct ResolvedReference: Sendable {
     }
 }
 
+public struct TorahSourceQuoteExcerpt: Codable, Sendable {
+    public let selectedText: String
+    public let segmentIndex: Int?
+    public let characterOffset: Int?
+    public let characterLength: Int?
+
+    public init(
+        selectedText: String,
+        segmentIndex: Int? = nil,
+        characterOffset: Int? = nil,
+        characterLength: Int? = nil
+    ) {
+        self.selectedText = selectedText
+        self.segmentIndex = segmentIndex
+        self.characterOffset = characterOffset
+        self.characterLength = characterLength
+    }
+}
+
 public struct TorahSourceQuoteProvenance: Codable, Sendable {
     public let retrievedAt: Date
     public let canonicalRef: String
     public let referenceProviderPayload: String
     public let textDocument: TorahTextDocument
-    public init(retrievedAt: Date = Date(), canonicalRef: String, referenceProviderPayload: String, textDocument: TorahTextDocument) {
-        self.retrievedAt = retrievedAt; self.canonicalRef = canonicalRef
-        self.referenceProviderPayload = referenceProviderPayload; self.textDocument = textDocument
+    public let excerpt: TorahSourceQuoteExcerpt?
+
+    public init(
+        retrievedAt: Date = Date(),
+        canonicalRef: String,
+        referenceProviderPayload: String,
+        textDocument: TorahTextDocument,
+        excerpt: TorahSourceQuoteExcerpt? = nil
+    ) {
+        self.retrievedAt = retrievedAt
+        self.canonicalRef = canonicalRef
+        self.referenceProviderPayload = referenceProviderPayload
+        self.textDocument = textDocument
+        self.excerpt = excerpt
     }
 }
 
