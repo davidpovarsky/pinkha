@@ -453,8 +453,7 @@ public extension LeafView {
                         canonicalRef: resolved.canonical,
                         labelHe: resolved.labelHe,
                         previewText: previewText,
-                        isEmbeddable: true,
-                        rawDocument: document
+                        isEmbeddable: true
                     )
                 } catch {
                     return nil

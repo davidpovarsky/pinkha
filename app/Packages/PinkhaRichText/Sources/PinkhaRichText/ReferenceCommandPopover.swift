@@ -21,20 +21,17 @@ public struct ReferenceCommandPreviewData: Sendable {
     public let labelHe: String
     public let previewText: String
     public let isEmbeddable: Bool
-    public let rawDocument: Any?
 
     public init(
         canonicalRef: String,
         labelHe: String,
         previewText: String,
-        isEmbeddable: Bool,
-        rawDocument: Any? = nil
+        isEmbeddable: Bool = true
     ) {
         self.canonicalRef = canonicalRef
         self.labelHe = labelHe
         self.previewText = previewText
         self.isEmbeddable = isEmbeddable
-        self.rawDocument = rawDocument
     }
 }
 
