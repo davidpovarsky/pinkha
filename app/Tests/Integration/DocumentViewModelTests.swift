@@ -139,4 +139,45 @@ struct LeafViewModelTests {
         vm.activeBlockId = nil
         #expect(vm.activeBlockId == nil)
     }
+
+    @Test func blockHierarchyCapabilitiesFollowFlattenedDFSBoundaries() throws {
+        let (vm, url) = try makeVM(); defer { cleanup(url) }
+        vm.blocks = [
+            EditableBlock(id: "A", content: .text([]), spans: [], done: false, depth: 0),
+            EditableBlock(id: "B", content: .text([]), spans: [], done: false, depth: 0),
+            EditableBlock(id: "C", content: .text([]), spans: [], done: false, depth: 1),
+            EditableBlock(id: "D", content: .text([]), spans: [], done: false, depth: 1),
+        ]
+        #expect(!vm.canIndentBlock("A"))
+        #expect(vm.canIndentBlock("B"))
+        #expect(!vm.canOutdentBlock("A"))
+        #expect(vm.canOutdentBlock("C"))
+        #expect(!vm.canIndentBlock("C"))
+        #expect(vm.canIndentBlock("D"))
+    }
+
+    @Test func invalidHierarchyCommandsAreSilentNoOps() throws {
+        let (vm, url) = try makeVM(); defer { cleanup(url) }
+        vm.blocks = [EditableBlock(
+            id: "root", content: .text([]), spans: [], done: false, depth: 0)]
+        vm.indentBlock(id: "root")
+        vm.outdentBlock(id: "root")
+        #expect(vm.errorMessage == nil)
+    }
+
+    @Test func multiParagraphIndentSaveUndoesAsOneBlockOperation() throws {
+        let (vm, url) = try makeVM(); defer { cleanup(url) }
+        vm.load()
+        vm.addBlock(type: .text)
+        let id = vm.blocks[0].id
+        let content = "one\u{2029}two\u{2029}three"
+        vm.saveBlock(id: id, spans: [InlineTextFfi(
+            content: content, styles: [.paragraphIndent(1)])])
+        vm.flushBurst(blockId: id)
+        vm.undo()
+        #expect(vm.blocks[0].spans.isEmpty)
+        vm.redo()
+        #expect(vm.blocks[0].spans.first?.content == content)
+        #expect(vm.blocks[0].spans.first?.styles == [.paragraphIndent(1)])
+    }
 }

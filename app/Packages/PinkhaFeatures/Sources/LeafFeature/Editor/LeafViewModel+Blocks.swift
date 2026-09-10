@@ -68,7 +68,7 @@ public extension LeafViewModel {
     /// `blocks` is a *flattened* depth-first view of a tree Rust still owns
     /// as a real hierarchy, so a parent and its children are sibling rows
     /// here. Anything that removes a parent has to remove that run too.
-    private func descendantRunLength(at index: Int) -> Int {
+    func descendantRunLength(at index: Int) -> Int {
         let depth = blocks[index].depth
         var length = 0
         var cursor = index + 1
@@ -107,7 +107,7 @@ public extension LeafViewModel {
 
     /// Id of the block that owns the row at `index`, or `nil` at top level.
     /// The parent is the nearest preceding row one depth shallower.
-    private func parentId(of index: Int) -> String? {
+    func parentId(of index: Int) -> String? {
         let depth = blocks[index].depth
         guard depth > 0 else { return nil }
         var cursor = index - 1
@@ -119,7 +119,7 @@ public extension LeafViewModel {
     }
 
     /// Position of the row at `index` among its siblings.
-    private func siblingIndex(of index: Int) -> Int {
+    func siblingIndex(of index: Int) -> Int {
         let depth = blocks[index].depth
         var position = 0
         var cursor = index - 1
@@ -388,10 +388,31 @@ public extension LeafViewModel {
     /// `InvalidOperation` from the FFI (block is the first of its level —
     /// nothing to indent under) surfaces via `errorMessage` like any other
     /// error; the UI uses `.errorAlert` to show it.
+    func canOutdentBlock(_ id: String) -> Bool {
+        guard let block = blocks.first(where: { $0.id == id }) else { return false }
+        return block.depth > 0
+    }
+
+    func canIndentBlock(_ id: String) -> Bool {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return false }
+        let depth = blocks[index].depth
+        var cursor = index - 1
+        while cursor >= 0 {
+            let candidateDepth = blocks[cursor].depth
+            if candidateDepth < depth { return false }
+            if candidateDepth == depth { return true }
+            cursor -= 1
+        }
+        return false
+    }
+
     func indentBlock(id: String) {
+        guard canIndentBlock(id) else { return }
         flushAllBursts()
         do {
             try api.indentBlock(leafId: leafId, blockId: id)
+            reloadBlocksAfterStructuralChange()
+        } catch PinkhaError.InvalidOperation {
             reloadBlocksAfterStructuralChange()
         } catch {
             errorMessage = error.localizedDescription
@@ -402,9 +423,12 @@ public extension LeafViewModel {
     /// inserted right after the former parent. Same reload semantics as
     /// `indentBlock`.
     func outdentBlock(id: String) {
+        guard canOutdentBlock(id) else { return }
         flushAllBursts()
         do {
             try api.outdentBlock(leafId: leafId, blockId: id)
+            reloadBlocksAfterStructuralChange()
+        } catch PinkhaError.InvalidOperation {
             reloadBlocksAfterStructuralChange()
         } catch {
             errorMessage = error.localizedDescription

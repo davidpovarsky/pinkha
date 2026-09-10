@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import PinkhaTorahCore
+import PinkhaTorahUI
 
 /// Displays the leaf cover and emoji icon, with associated action menus.
 public struct LeafDecorView: View {
@@ -12,6 +14,7 @@ public struct LeafDecorView: View {
     let onImageData: (Data) -> Void
     let onImageFichier: (URL) -> Void
     let onIcone: (String?) -> Void
+    let onTorahAdd: ((TorahAssociationKind) -> Void)?
     @State private var photoSelection: PhotosPickerItem?
     @State private var photosPickerOuvert = false
     @State private var fichierOuvert = false
@@ -54,6 +57,9 @@ public struct LeafDecorView: View {
                 HStack(spacing: 10) {
                     coverMenu
                     iconMenu
+                    if let onTorahAdd {
+                        TorahAddLinkControl(onSelect: onTorahAdd)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

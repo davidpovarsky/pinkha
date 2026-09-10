@@ -14,7 +14,7 @@
 │                       ▐▛███▜▌                      │ ──────────────── │
 │                      ▝▜█████▛▘                     │ What's new       │
 │                        ▘▘ ▝▝                       │ `/code-review -… │
-│  Sonnet 4.6 · Claude Pro · ybikouta@icloud.com's   │ Skills and slas… │
+│  Sonnet 4.6 · Claude Pro · legacy account          │ Skills and slas… │
 │  Organization                                      │ Added `/reload-… │
 │   ~/…/~ Projectground — iCloud/Doneground/pinkha   │ /release-notes … │
 ╰───────────────────────────────────────────────────────────────────────╯
@@ -2748,7 +2748,7 @@
 │                       ▐▛███▜▌                      │ ──────────────── │
 │                      ▝▜█████▛▘                     │ What's new       │
 │                        ▘▘ ▝▝                       │ `/code-review -… │
-│  Sonnet 4.6 · Claude Pro · ybikouta@icloud.com's   │ Skills and slas… │
+│  Sonnet 4.6 · Claude Pro · legacy account          │ Skills and slas… │
 │  Organization                                      │ Added `/reload-… │
 │   ~/…/~ Projectground — iCloud/Doneground/pinkha   │ /release-notes … │
 ╰───────────────────────────────────────────────────────────────────────╯
@@ -5424,7 +5424,7 @@
 │                       ▐▛███▜▌                      │ ──────────────── │
 │                      ▝▜█████▛▘                     │ What's new       │
 │                        ▘▘ ▝▝                       │ `/code-review -… │
-│  Sonnet 4.6 · Claude Pro · ybikouta@icloud.com's   │ Skills and slas… │
+│  Sonnet 4.6 · Claude Pro · legacy account          │ Skills and slas… │
 │  Organization                                      │ Added `/reload-… │
 │   ~/…/~ Projectground — iCloud/Doneground/pinkha   │ /release-notes … │
 ╰───────────────────────────────────────────────────────────────────────╯

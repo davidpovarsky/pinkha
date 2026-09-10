@@ -1,193 +1,102 @@
-# ── Pinkha — CD pipelines ─────────────────────────────────────────────────
-#
-# Two lanes :
-#   • `beta`    — builds from `staging` and uploads to TestFlight.
-#   • `release` — builds from `master` and stages an App Store submission.
-#
-# Both are invoked locally (`bundle exec fastlane ios beta`) or from
-# GitHub Actions. The actions/secrets surface the same ENV variables in
-# both contexts so the lanes are environment-agnostic.
+# ChavrusaNotes delivery lanes. Signing follows the ChavrusaText model:
+# one installed Apple Distribution certificate plus one explicit App Store
+# profile for every signed bundle.
 
-# Suppress fastlane's noisy auto-update prompts.
 opt_out_usage
-update_fastlane(no_update: true) if respond_to?(:update_fastlane)
 
-# Shared lane prefix so commands look like `fastlane ios beta`.
 platform :ios do
+  APP_ID = "com.itorah.chavrusanotes"
+  SHARE_ID = "com.itorah.chavrusanotes.share"
+  WIDGETS_ID = "com.itorah.chavrusanotes.widgets"
+  TEAM_ID = "NA6HPWARQ2"
 
-  # ── Setup helpers ────────────────────────────────────────────────────
-
-  # Centralised ASC API key loader — every lane needs it, factoring it
-  # avoids drift between the two upload paths.
   def load_asc_api_key
     app_store_connect_api_key(
-      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
-      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
-      # The content can be either the raw .p8 text OR a base64-encoded
-      # blob — base64 is friendlier for GitHub Secrets which strip
-      # newlines from multi-line values.
-      key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_CONTENT"),
-      is_key_content_base64: ENV.fetch("APP_STORE_CONNECT_API_KEY_BASE64", "true") == "true",
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8"),
+      is_key_content_base64: true,
       in_house: false,
     )
   end
 
-  # Rebuilds the pinkha.xcframework Rust→Swift bridge if it is
-  # missing. The framework is gitignored (it's a build artefact)
-  # so a fresh checkout — local or CI — has nothing on disk and
-  # xcodebuild can't resolve the PinkhaFFI binaryTarget without
-  # it. Running the script is cheap when the Rust cache is warm
-  # (~10 seconds) and the heavy first-time cost is amortised by
-  # Swatinem/rust-cache in the workflow.
   def build_xcframework_if_needed
-    framework_path = File.expand_path(
-      "../pinkha.xcframework",
-      __dir__,
-    )
-    return if Dir.exist?(framework_path) &&
-      !Dir.empty?(framework_path)
-    sh("../build-xcframework.sh", "release")
+    framework_path = File.expand_path("../pinkha.xcframework", __dir__)
+    sh("../build-xcframework.sh", "release") unless Dir.exist?(framework_path) && !Dir.empty?(framework_path)
   end
 
-  # Creates a fresh, unlocked keychain named after
-  # MATCH_KEYCHAIN_NAME on CI runners that don't already have one
-  # (GitHub Actions macos-14 runners start with only the login
-  # keychain). No-op on a developer Mac, where the keychain
-  # already exists and the env var is typically unset.
-  def setup_ci_keychain_if_needed
-    keychain_name = ENV["MATCH_KEYCHAIN_NAME"]
-    return if keychain_name.nil? || keychain_name.empty?
-    keychain_path = File.expand_path(
-      "~/Library/Keychains/#{keychain_name}-db"
-    )
-    return if File.exist?(keychain_path)
-    create_keychain(
-      name: keychain_name,
-      password: ENV.fetch("MATCH_KEYCHAIN_PASSWORD", ""),
-      default_keychain: true,
-      unlock: true,
-      timeout: 3600,
-      lock_when_sleeps: false,
-    )
+  def profile_mapping
+    {
+      APP_ID => ENV.fetch("CHAVRUSANOTES_MAIN_PROFILE"),
+      SHARE_ID => ENV.fetch("CHAVRUSANOTES_SHARE_PROFILE"),
+      WIDGETS_ID => ENV.fetch("CHAVRUSANOTES_WIDGETS_PROFILE"),
+    }
   end
 
-  # Build number = (latest TestFlight build number, all trains
-  # included) + 1. This guarantees a monotonically increasing
-  # build number even if you submit to App Store separately from
-  # TestFlight ; both surfaces share the same numbering space.
-  def bump_build_number
-    next_number = latest_testflight_build_number(
-      api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
-      initial_build_number: 0,
-    ) + 1
-    # `xcodeproj:` is required because the project lives at
-    # `app/Pinkha.xcodeproj`, not at the repo root. Without it
-    # increment_build_number falls back to agvtool which can't
-    # find any .xcodeproj in the cwd and fails.
-    increment_build_number(
-      build_number: next_number,
-      xcodeproj: "app/Pinkha.xcodeproj",
-    )
-    next_number
+  def signing_xcargs
+    [
+      "DEVELOPMENT_TEAM=#{TEAM_ID}",
+      "CODE_SIGN_STYLE=Manual",
+      'CODE_SIGN_IDENTITY="Apple Distribution"',
+      "CHAVRUSANOTES_MAIN_PROFILE=\"#{ENV.fetch('CHAVRUSANOTES_MAIN_PROFILE')}\"",
+      "CHAVRUSANOTES_SHARE_PROFILE=\"#{ENV.fetch('CHAVRUSANOTES_SHARE_PROFILE')}\"",
+      "CHAVRUSANOTES_WIDGETS_PROFILE=\"#{ENV.fetch('CHAVRUSANOTES_WIDGETS_PROFILE')}\"",
+    ].join(" ")
   end
 
-  # ── Lane : bootstrap_match ───────────────────────────────────────────
-  #
-  # First-time setup. Run this ONCE locally on a Mac to mint the App
-  # Store distribution certificate + provisioning profile and push
-  # them (encrypted with MATCH_PASSWORD) into the pinkha-app/certificates
-  # repo. Subsequent runs of `match(readonly: true)` from beta/release
-  # lanes will fetch them rather than create new ones.
-  #
-  # Why a dedicated lane : the bare `fastlane match` CLI invocation
-  # doesn't go through the Fastfile, so it never loads the ASC API
-  # key — and falls back to interactive Apple ID login which doesn't
-  # work in non-interactive shells (CI, scripted runs).
-  desc "First-time setup : create App Store cert + profile and push to certificates repo."
-  lane :bootstrap_match do
-    load_asc_api_key
-    # readonly: false = allow match to create the cert/profile if
-    # they don't exist yet. Only safe for this one-time bootstrap.
-    match(type: "appstore", readonly: false)
+  def bump_build_number(api_key)
+    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
+    increment_build_number(build_number: number, xcodeproj: "app/Pinkha.xcodeproj")
+    number
   end
 
-  # ── Lane : beta ──────────────────────────────────────────────────────
-
-  desc "Builds the staging branch and uploads to TestFlight."
-  lane :beta do
-    # Soft guard : refuse to run from a stray branch by accident.
-    # `skip_if_branch_check` env var lets the CI runner override
-    # (GitHub Actions checks out a detached HEAD, not the branch name).
-    ensure_git_branch(branch: "staging") unless ENV["SKIP_BRANCH_CHECK"]
-
-    load_asc_api_key
-    setup_ci_keychain_if_needed
+  def build_signed_app
     build_xcframework_if_needed
-
-    # `readonly: true` makes match fail loudly if a cert or profile
-    # is missing instead of silently creating new ones. On CI we
-    # want explicit "go run bootstrap" rather than mysterious extra
-    # certs polluting the developer portal.
-    match(type: "appstore", readonly: true)
-
-    bump_build_number
-
     build_app(
       project: "app/Pinkha.xcodeproj",
       scheme: "PinkhaRelease",
       configuration: "Release",
       export_method: "app-store",
+      export_options: {
+        method: "app-store-connect",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        teamID: TEAM_ID,
+        provisioningProfiles: profile_mapping,
+      },
+      xcargs: signing_xcargs,
       output_directory: "build/",
-      output_name: "Pinkha.ipa",
+      output_name: "ChavrusaNotes.ipa",
       clean: true,
       include_symbols: true,
       include_bitcode: false,
     )
+  end
 
+  desc "Build and upload ChavrusaNotes to TestFlight"
+  lane :beta do
+    ensure_git_branch(branch: "beta-test") unless ENV["SKIP_BRANCH_CHECK"]
+    api_key = load_asc_api_key
+    bump_build_number(api_key)
+    build_signed_app
     upload_to_testflight(
-      api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
-      # Don't block the CI runner on Apple's processing pipeline
-      # (which can take 30+ minutes). The build shows up in
-      # TestFlight whenever Apple finishes ; testers get notified.
-      skip_waiting_for_build_processing: true,
-      # Inherit "What to Test" from the changelog file so we don't
-      # have to edit the Fastfile each cycle. Keep the file ASCII
-      # to dodge encoding surprises.
-      changelog: File.exist?("changelog.txt") ? File.read("changelog.txt") : "Pinkha staging build.",
+      api_key: api_key,
+      ipa: "build/ChavrusaNotes.ipa",
+      skip_waiting_for_build_processing: false,
+      distribute_external: false,
+      changelog: (File.exist?("fastlane/changelog.txt") ? File.read("fastlane/changelog.txt") : `git log -1 --pretty=%s`.strip).slice(0, 4000),
     )
   end
 
-  # ── Lane : release ───────────────────────────────────────────────────
-
-  desc "Builds the master branch and stages an App Store submission."
+  desc "Upload an App Store candidate without submitting it for review"
   lane :release do
     ensure_git_branch(branch: "master") unless ENV["SKIP_BRANCH_CHECK"]
-
-    load_asc_api_key
-    setup_ci_keychain_if_needed
-    build_xcframework_if_needed
-
-    match(type: "appstore", readonly: true)
-
-    bump_build_number
-
-    build_app(
-      project: "app/Pinkha.xcodeproj",
-      scheme: "PinkhaRelease",
-      configuration: "Release",
-      export_method: "app-store",
-      output_directory: "build/",
-      output_name: "Pinkha.ipa",
-      clean: true,
-      include_symbols: true,
-      include_bitcode: false,
-    )
-
-    # Upload but don't submit for review yet — gives you a manual
-    # checkpoint in App Store Connect to fill in release notes,
-    # screenshots, etc. before clicking "Submit for Review".
+    api_key = load_asc_api_key
+    bump_build_number(api_key)
+    build_signed_app
     upload_to_app_store(
-      api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
+      api_key: api_key,
+      ipa: "build/ChavrusaNotes.ipa",
       submit_for_review: false,
       automatic_release: false,
       force: true,

@@ -2,6 +2,8 @@ import SwiftUI
 import PinkhaCore
 import PinkhaFFI
 import PinkhaRichText
+import PinkhaTorahCore
+import PinkhaTorahUI
 
 // ── Building callbacks and block rows ────────────────────────────────────────
 
@@ -25,6 +27,69 @@ private struct SelectionTapModifier: ViewModifier {
 
 public extension LeafView {
 
+    func reloadTorahSourceQuotes() async {
+        guard let path = store.activeDatabasePath,
+              let workspace = try? TorahWorkspace.application(databasePath: path) else {
+            torahSourceQuotes = [:]; return
+        }
+        do {
+            let values = try await workspace.associations(forLeafID: vm.leafId)
+            var sourceQuotes: [String: TorahAssociation] = [:]
+            for association in values {
+                guard association.kind == .ref, association.role == .sourceQuote,
+                      case .block(_, let blockID) = association.target else { continue }
+                sourceQuotes[blockID] = association
+            }
+            torahSourceQuotes = sourceQuotes
+        } catch is CancellationError {} catch { torahErrorMessage = error.localizedDescription }
+    }
+
+    func insertTorahSourceTransfer(_ transfer: TorahSourceTransfer, afterBlockId: String?) {
+        guard let path = store.activeDatabasePath else {
+            torahErrorMessage = TorahStrings.storageUnavailable
+            return
+        }
+        Task { @MainActor in
+            do {
+                try await vm.insertTorahSourceSnapshot(
+                    transfer: transfer,
+                    afterId: afterBlockId,
+                    databasePath: path
+                )
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+            } catch is CancellationError {
+            } catch {
+                torahErrorMessage = TorahStrings.couldNotInsertSource
+            }
+        }
+    }
+
+    func insertTorahSourceQuote(candidate: ReferenceCommandCandidate, blockID: String) {
+        guard let path = store.activeDatabasePath else { torahErrorMessage = TorahStrings.storageUnavailable; return }
+        Task { @MainActor in
+            do {
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                let workspace = try TorahWorkspace.application(databasePath: path)
+                let resolved = try await workspace.resolveReference(candidate.id)
+                guard resolved.isEmbeddableSource else { throw TorahError.referenceTooBroad }
+                let document = try await workspace.fetchText(reference: resolved.canonical)
+                let maximumSourceSegments = 200
+                let maximumSourceCharacters = 100_000
+                guard document.segments.count <= maximumSourceSegments,
+                      document.segments.reduce(0, { $0 + $1.text.count }) <= maximumSourceCharacters
+                else { throw TorahError.referenceTooBroad }
+                let target = TorahTarget.block(leafID: vm.leafId, blockID: blockID)
+                try await workspace.addSourceQuote(resolved, document: document, rawInput: candidate.title, to: target)
+                guard vm.blocks.contains(where: { $0.id == blockID }) else { return }
+                let snapshot = document.segments.map(\.text).joined(separator: pinkhaParagraphSeparator)
+                vm.convertBlockContent(id: blockID, to: .quote(icon: "", text: [InlineTextFfi(content: snapshot, styles: [])]))
+                torahPreviewRevision += 1
+                await reloadTorahSourceQuotes()
+            } catch is CancellationError {} catch { torahErrorMessage = TorahStrings.message(for: error) }
+        }
+    }
+
     /// Builds the full row for a block in the List: selection HStack + content + gestures.
     @ViewBuilder
     func blockListRow(_ block: Binding<EditableBlock>) -> some View {
@@ -38,30 +103,49 @@ public extension LeafView {
         let isSpotlit = spotlightBlockId == b.id
         let isDimmed  = spotlightBlockId != nil && !isSpotlit
         let showTint  = isSpotlit && settings.spotlightTinted
-        HStack(alignment: .center, spacing: 10) {
-            if editMode == .active { selectionButton(b.id) }
-            // Visual indentation for nested blocks. The Rust domain models
-            // nesting as `Block.children`; we flatten the tree at load time
-            // and translate the resulting `depth` to a leading padding here.
-            // Each level shifts the block right by 20 pt — enough to read at
-            // a glance, conservative to fit nested-3 on a narrow phone.
-            if b.depth > 0 {
-                Spacer().frame(width: CGFloat(b.depth) * 20)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                if editMode == .active { selectionButton(b.id) }
+                // Visual indentation for nested blocks. The Rust domain models
+                // nesting as `Block.children`; we flatten the tree at load time
+                // and translate the resulting `depth` to a leading padding here.
+                // Each level shifts the block right by 20 pt — enough to read at
+                // a glance, conservative to fit nested-3 on a narrow phone.
+                if b.depth > 0 {
+                    Spacer().frame(width: CGFloat(b.depth) * 20)
+                }
+                BlockRowView(
+                    block: block,
+                    autoFocusId: $vm.autoFocusId,
+                    autoFocusOffset: $vm.autoFocusOffset,
+                    cb: blockCallbacks(for: b)
+                )
+                // Lock disables editing, NOT navigation. Page-reference
+                // blocks are pure navigation targets (tap = push child doc)
+                // so we keep them tappable even on a locked / selection-mode
+                // parent — otherwise an imported, locked Notion page would
+                // trap the user with no way to drill into its sub-pages.
+                .disabled((vm.locked || editMode == .active) && !b.content.isNavigationTarget)
+                .allowsHitTesting((!vm.locked && editMode != .active) || b.content.isNavigationTarget)
             }
-            BlockRowView(
-                block: block,
-                autoFocusId: $vm.autoFocusId,
-                autoFocusOffset: $vm.autoFocusOffset,
-                cb: blockCallbacks(for: b)
-            )
-            // Lock disables editing, NOT navigation. Page-reference
-            // blocks are pure navigation targets (tap = push child doc)
-            // so we keep them tappable even on a locked / selection-mode
-            // parent — otherwise an imported, locked Notion page would
-            // trap the user with no way to drill into its sub-pages.
-            .disabled((vm.locked || editMode == .active) && !b.content.isNavigationTarget)
-            .allowsHitTesting((!vm.locked && editMode != .active) || b.content.isNavigationTarget)
+            if targetedDropBlockId == b.id {
+                Rectangle()
+                    .fill(effectiveAccentColor)
+                    .frame(height: 2)
+                    .padding(.horizontal, 16)
+                    .transition(.opacity)
+            }
         }
+        .dropDestination(for: TorahSourceTransfer.self) { items, _ in
+            guard let item = items.first else { return false }
+            insertTorahSourceTransfer(item, afterBlockId: b.id)
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                targetedDropBlockId = targeted ? b.id : (targetedDropBlockId == b.id ? nil : targetedDropBlockId)
+            }
+        }
+
         // contentShape + onTapGesture used to be unconditional, which
         // installed an HStack-level tap recogniser that swallowed taps
         // before they could reach inner controls (notably the Button
@@ -109,7 +193,7 @@ public extension LeafView {
             // direction). FFI's `indentBlock` no-ops if the block is
             // already the first child or has no previous sibling, so
             // we don't need to gate the button on hierarchy state.
-            if !vm.locked && editMode != .active {
+            if !vm.locked && editMode != .active && vm.canIndentBlock(b.id) {
                 Button {
                     Haptic.tap()
                     vm.indentBlock(id: b.id)
@@ -130,13 +214,23 @@ public extension LeafView {
                 // Outdent as secondary — left-swipe surfaces both
                 // buttons; partial swipe reveals them without firing
                 // delete. Direction matches the block's movement (left).
+                if vm.canOutdentBlock(b.id) {
+                    Button {
+                        Haptic.tap()
+                        vm.outdentBlock(id: b.id)
+                    } label: {
+                        Label("Outdent", systemImage: "arrow.left.to.line")
+                    }
+                    .tint(.orange)
+                }
                 Button {
                     Haptic.tap()
-                    vm.outdentBlock(id: b.id)
+                    torahTarget = .block(leafID: vm.leafId, blockID: b.id)
                 } label: {
-                    Label("Outdent", systemImage: "arrow.left.to.line")
+                    Label(TorahStrings.links, systemImage: "books.vertical")
                 }
-                .tint(.orange)
+                .tint(.indigo)
+                .accessibilityIdentifier("blockTorahLinksSwipeAction")
             }
         }
     }
@@ -243,6 +337,8 @@ public extension LeafView {
             canRedoProvider: { vm.canRedo },
             onIndent: { vm.indentBlock(id: block.id) },
             onOutdent: { vm.outdentBlock(id: block.id) },
+            canIndent: vm.canIndentBlock(block.id),
+            canOutdent: vm.canOutdentBlock(block.id),
             onSetBlockColor: { color in vm.setBlockColor(id: block.id, color: color) },
             onSetBlockBackgroundColor: { color in
                 vm.setBlockBackgroundColor(id: block.id, color: color)
@@ -265,6 +361,22 @@ public extension LeafView {
                     title: $0.titlePlain.isEmpty ? "Untitled" : $0.titlePlain) }
             },
             onDuplicate: { vm.duplicateBlock(id: block.id) },
+            onTorahAssociations: vm.locked || readerMode.isActive ? nil : {
+                torahTarget = .block(leafID: vm.leafId, blockID: block.id)
+            },
+            sourceQuoteAssociation: torahSourceQuotes[block.id],
+            onOpenTorahReference: { requestOpenTorahInspector($0, blockId: block.id) },
+            onReferenceCommandLookup: { query in
+                guard let path = store.activeDatabasePath,
+                      let workspace = try? TorahWorkspace.application(databasePath: path) else { return [] }
+                do {
+                    return try await workspace.suggestReferences(query).map { .init(id: $0.id, title: $0.label) }
+                } catch is CancellationError { return [] }
+                catch { return [] }
+            },
+            onReferenceCommandPick: { candidate in
+                insertTorahSourceQuote(candidate: candidate, blockID: block.id)
+            },
             accentColor: effectiveAccentColor,
             themeForegroundColor: effectiveTheme.effectiveForegroundColor(darkVariant: effectiveThemeDarkVariant),
             keyboardAppearance: effectiveKeyboardAppearance,
