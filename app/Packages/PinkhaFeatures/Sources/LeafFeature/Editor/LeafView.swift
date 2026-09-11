@@ -252,7 +252,7 @@ public struct LeafView: View {
                 }
             }
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { torahInspectorCoordinator.isPresented },
             set: { if !$0 { torahInspectorCoordinator.close() } }
         )) {
