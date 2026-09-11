@@ -139,21 +139,40 @@ final class TorahAssociationsUITests: XCTestCase {
         let refPreview = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "torahLeafPreviewRow.")).firstMatch
         XCTAssertTrue(refPreview.waitForExistence(timeout: 5))
 
+        // 1. Open Torah source presentation
         refPreview.press(forDuration: 1.0)
         let openInspector = app.buttons["Open in Inspector"]
         XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
         openInspector.tap()
 
+        // 2. Torah source UI appears
         let inspectorClose = app.buttons["Close"]
         let inspectorTitle = app.staticTexts["ראש השנה ט״ז ב׳"]
         let inspectorExists = inspectorClose.waitForExistence(timeout: 5) || inspectorTitle.waitForExistence(timeout: 5)
         XCTAssertTrue(inspectorExists)
 
-        let backButton = app.navigationBars.buttons.firstMatch
+        // 3. Leaf/document has NOT popped to Library
+        let addTorahLinkButton = app.buttons["torahAddLinkButton"]
+        XCTAssertTrue(addTorahLinkButton.exists)
+
+        // 4. Dismiss the Torah presentation using its explicit Close control
+        XCTAssertTrue(inspectorClose.waitForExistence(timeout: 3))
+        inspectorClose.tap()
+
+        // 5. Verify the Leaf/document is still active
+        XCTAssertTrue(addTorahLinkButton.waitForExistence(timeout: 3))
+
+        // 6. Then tap the Leaf navigation Back button
+        let backButton = app.navigationBars.buttons["BackButton"].exists
+            ? app.navigationBars.buttons["BackButton"]
+            : app.navigationBars.buttons.firstMatch
         XCTAssertTrue(backButton.waitForExistence(timeout: 3))
         backButton.tap()
 
+        // 7. Verify LibraryView appears
         XCTAssertTrue(app.staticTexts["Seeded Leaf 1"].waitForExistence(timeout: 5))
+
+        // 8. Verify no Torah presentation remains
         XCTAssertFalse(inspectorClose.exists)
     }
 

@@ -27,6 +27,7 @@ public struct LeafView: View {
     /// so a parallel entry in the leaf's own toolbar is required.
     @Environment(ReaderMode.self) var readerMode
     @Environment(AmbientLight.self) var ambientLight
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Read-only here — drives the optional spotlight tint applied in
     /// `blockListRow`. The setting is owned at the app level so every
     /// leaf picks the same look without having to re-fetch it.
@@ -52,17 +53,13 @@ public struct LeafView: View {
     @State var torahErrorMessage: String?
     @State private var torahInspectorCoordinator = TorahInspectorCoordinator()
     @State private var torahInsertionBridge = TorahDocumentInsertionBridge()
-    @State var torahRepository: TorahInspectorRepository?
     @State var targetedDropBlockId: String? = nil
     @State private var pendingInspectorRequest: TorahInspectorSelection?
 
     func getTorahRepository() -> TorahInspectorRepository? {
-        if let torahRepository { return torahRepository }
         guard let path = store.activeDatabasePath,
               let workspace = try? TorahWorkspace.application(databasePath: path) else { return nil }
-        let repo = TorahInspectorRepository(workspace: workspace)
-        torahRepository = repo
-        return repo
+        return TorahInspectorRepository(workspace: workspace)
     }
 
     func requestOpenTorahInspector(_ selection: TorahInspectorSelection, blockId: String? = nil) {
@@ -252,29 +249,49 @@ public struct LeafView: View {
                 }
             }
         }
-        .inspector(isPresented: Binding(
-            get: { torahInspectorCoordinator.isPresented },
-            set: { if !$0 { torahInspectorCoordinator.close() } }
-        )) {
-            if let selection = torahInspectorCoordinator.selection, let repo = getTorahRepository() {
-                TorahInspectorView(
-                    repository: repo,
-                    selection: selection,
-                    onClose: { torahInspectorCoordinator.close() },
-                    onInsertSegment: { transfer in
-                        Task { @MainActor in
-                            try? await torahInsertionBridge.insert(transfer)
-                        }
-                    }
-                )
-                .id(selection.id)
+        .inspector(isPresented: isTorahRegularInspectorPresented) {
+            torahSourcePresentationContent
                 .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
-            } else {
-                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
-            }
+        }
+        .sheet(isPresented: isTorahCompactSheetPresented) {
+            torahSourcePresentationContent
         }
         .environment(torahInspectorCoordinator)
         .environment(torahInsertionBridge)
+    }
+
+    private var isTorahRegularInspectorPresented: Binding<Bool> {
+        Binding(
+            get: { horizontalSizeClass != .compact && torahInspectorCoordinator.isPresented },
+            set: { if !$0 { torahInspectorCoordinator.close() } }
+        )
+    }
+
+    private var isTorahCompactSheetPresented: Binding<Bool> {
+        Binding(
+            get: { horizontalSizeClass == .compact && torahInspectorCoordinator.isPresented },
+            set: { if !$0 { torahInspectorCoordinator.close() } }
+        )
+    }
+
+    @ViewBuilder
+    private var torahSourcePresentationContent: some View {
+        if let selection = torahInspectorCoordinator.selection,
+           let databasePath = store.activeDatabasePath {
+            TorahInspectorView(
+                databasePath: databasePath,
+                selection: selection,
+                onClose: { torahInspectorCoordinator.close() },
+                onInsertSegment: { transfer in
+                    Task { @MainActor in
+                        try? await torahInsertionBridge.insert(transfer)
+                    }
+                }
+            )
+            .id(selection.id)
+        } else {
+            ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+        }
     }
 
     // ── Main list ────────────────────────────────────────────────────────────
