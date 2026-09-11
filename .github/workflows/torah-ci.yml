@@ -84,14 +84,17 @@ jobs:
             '.runtimes | map(select(.isAvailable == true and (.name | startswith("iOS 27")))) | last | .identifier')
           [ -n "$RUNTIME" ] && [ "$RUNTIME" != "null" ] || { echo "::error::No available iOS 27 runtime"; exit 1; }
           UDID=""
+          SELECTED_DEVICE=""
           while IFS= read -r DEVICE_TYPE; do
             if CANDIDATE=$(xcrun simctl create "Pinkha Torah CI $GITHUB_RUN_ID" "$DEVICE_TYPE" "$RUNTIME" 2>/dev/null); then
               UDID="$CANDIDATE"
+              SELECTED_DEVICE="$DEVICE_TYPE"
               break
             fi
           done < <(xcrun simctl list devicetypes --json | jq -r \
-            '.devicetypes | map(select(.name | startswith("iPhone"))) | reverse[] | .identifier')
-          [ -n "$UDID" ] || { echo "::error::No iPhone device type is compatible with $RUNTIME"; exit 1; }
+            '.devicetypes | map(select(.name | startswith("iPad"))) | reverse[] | .identifier')
+          [ -n "$UDID" ] || { echo "::error::No iPad device type is compatible with $RUNTIME"; exit 1; }
+          echo "Selected iPad device: $SELECTED_DEVICE ($UDID)"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
