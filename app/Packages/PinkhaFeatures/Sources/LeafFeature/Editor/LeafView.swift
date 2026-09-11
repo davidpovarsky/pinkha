@@ -249,29 +249,18 @@ public struct LeafView: View {
                 }
             }
         }
-        .inspector(isPresented: isTorahRegularInspectorPresented) {
-            torahSourcePresentationContent
-                .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
-        }
-        .sheet(isPresented: isTorahCompactSheetPresented) {
-            torahSourcePresentationContent
-        }
+        .adaptiveTorahPresentation(
+            isRegularWidth: horizontalSizeClass == .regular,
+            isPresented: Binding(
+                get: { torahInspectorCoordinator.isPresented },
+                set: { if !$0 { torahInspectorCoordinator.close() } }
+            ),
+            content: {
+                torahSourcePresentationContent
+            }
+        )
         .environment(torahInspectorCoordinator)
         .environment(torahInsertionBridge)
-    }
-
-    private var isTorahRegularInspectorPresented: Binding<Bool> {
-        Binding(
-            get: { horizontalSizeClass == .regular && torahInspectorCoordinator.isPresented },
-            set: { if !$0 { torahInspectorCoordinator.close() } }
-        )
-    }
-
-    private var isTorahCompactSheetPresented: Binding<Bool> {
-        Binding(
-            get: { horizontalSizeClass != .regular && torahInspectorCoordinator.isPresented },
-            set: { if !$0 { torahInspectorCoordinator.close() } }
-        )
     }
 
     @ViewBuilder
@@ -1123,4 +1112,24 @@ public struct LeafView: View {
 
     static func lockKeyFor(leafId: String) -> String { "leaf.locked.\(leafId)" }
     static func iconKeyFor(leafId: String) -> String { "leaf.icon.\(leafId)" }
+}
+
+extension View {
+    @ViewBuilder
+    fileprivate func adaptiveTorahPresentation(
+        isRegularWidth: Bool,
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> some View
+    ) -> some View {
+        if isRegularWidth {
+            self.inspector(isPresented: isPresented) {
+                content()
+                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+            }
+        } else {
+            self.sheet(isPresented: isPresented) {
+                content()
+            }
+        }
+    }
 }
