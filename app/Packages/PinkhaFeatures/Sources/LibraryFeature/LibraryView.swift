@@ -439,7 +439,7 @@ public struct LibraryView: View {
                 if let api = store.api {
                     LeafView(vm: tabManager.open(leafId: leafId, api: api),
                              onDisappear: store.load)
-                        .navigationTransition(.zoom(sourceID: leafId, in: docZoom))
+                        // .navigationTransition(.zoom(sourceID: leafId, in: docZoom))
                 }
             case .shelf(let shelfId):
                 if let shelf = store.listShelves().first(where: { $0.id == shelfId }) {
