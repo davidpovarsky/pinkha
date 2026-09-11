@@ -262,14 +262,14 @@ public struct LeafView: View {
 
     private var isTorahRegularInspectorPresented: Binding<Bool> {
         Binding(
-            get: { horizontalSizeClass != .compact && torahInspectorCoordinator.isPresented },
+            get: { horizontalSizeClass == .regular && torahInspectorCoordinator.isPresented },
             set: { if !$0 { torahInspectorCoordinator.close() } }
         )
     }
 
     private var isTorahCompactSheetPresented: Binding<Bool> {
         Binding(
-            get: { horizontalSizeClass == .compact && torahInspectorCoordinator.isPresented },
+            get: { horizontalSizeClass != .regular && torahInspectorCoordinator.isPresented },
             set: { if !$0 { torahInspectorCoordinator.close() } }
         )
     }
