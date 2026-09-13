@@ -55,10 +55,14 @@ jobs:
         run: swift test --package-path app/Packages/PinkhaTorah --filter "$TEST_FILTER"
 
   simulator:
-    name: Real iOS simulator XCUITest
+    name: Simulator XCUITest (${{ matrix.device_family }})
     if: github.event_name != 'workflow_dispatch' || inputs.run_ui_tests == true || inputs.full_suite == true
     runs-on: xcode-27
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        device_family: [iPhone, iPad]
     steps:
       - uses: actions/checkout@v7
       - name: Install XcodeGen
@@ -85,13 +89,13 @@ jobs:
           [ -n "$RUNTIME" ] && [ "$RUNTIME" != "null" ] || { echo "::error::No available iOS 27 runtime"; exit 1; }
           UDID=""
           while IFS= read -r DEVICE_TYPE; do
-            if CANDIDATE=$(xcrun simctl create "Pinkha Torah CI $GITHUB_RUN_ID" "$DEVICE_TYPE" "$RUNTIME" 2>/dev/null); then
+            if CANDIDATE=$(xcrun simctl create "Pinkha Torah CI $GITHUB_RUN_ID ${{ matrix.device_family }}" "$DEVICE_TYPE" "$RUNTIME" 2>/dev/null); then
               UDID="$CANDIDATE"
               break
             fi
           done < <(xcrun simctl list devicetypes --json | jq -r \
-            '.devicetypes | map(select(.name | startswith("iPhone"))) | reverse[] | .identifier')
-          [ -n "$UDID" ] || { echo "::error::No iPhone device type is compatible with $RUNTIME"; exit 1; }
+            '.devicetypes | map(select(.name | startswith("${{ matrix.device_family }}"))) | reverse[] | .identifier')
+          [ -n "$UDID" ] || { echo "::error::No ${{ matrix.device_family }} device type is compatible with $RUNTIME"; exit 1; }
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
@@ -114,7 +118,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pinkha-torah-xcresult-${{ github.run_id }}
+          name: pinkha-torah-xcresult-${{ matrix.device_family }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/PinkhaTests.xcresult
             ${{ runner.temp }}/simulator-logs

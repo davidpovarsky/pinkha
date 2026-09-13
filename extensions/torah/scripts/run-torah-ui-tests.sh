@@ -18,9 +18,11 @@ if [ "$MODE" = "full" ]; then
     -only-testing:PinkhaUITests
   )
 elif [ -n "$TEST_SELECTION" ]; then
-  ONLY_TESTS=(
-    "-only-testing:$TEST_SELECTION"
-  )
+  ONLY_TESTS=()
+  IFS=',' read -ra TESTS <<< "$TEST_SELECTION"
+  for t in "${TESTS[@]}"; do
+    ONLY_TESTS+=("-only-testing:$t")
+  done
 fi
 
 xcodebuild test \
