@@ -24,6 +24,7 @@ public struct LibraryView: View {
     @Environment(AppSettings.self) var settings
     @Environment(TabManager.self) var tabManager
     @State private var showingSettings = false
+    @State private var torahHost = TorahInspectorHost()
     /// Programmatic navigation stack so a freshly-created leaf can be
     /// pushed onto the editor right after the create sheet dismisses
     /// — driven by `composer.pendingOpenLeaf`. Must stay `@State` here :
@@ -454,6 +455,30 @@ public struct LibraryView: View {
         NavigationStack(path: $path) {
             stackContent
         }
+        .inspector(isPresented: Binding(
+            get: { torahHost.activeSession?.isPresented ?? false },
+            set: { if !$0 { torahHost.activeSession?.close() } }
+        )) {
+            if let session = torahHost.activeSession,
+               let selection = session.selection,
+               let databasePath = session.databasePath ?? store.activeDatabasePath {
+                TorahInspectorView(
+                    databasePath: databasePath,
+                    selection: selection,
+                    onClose: { session.close() },
+                    onInsertSegment: { transfer in
+                        Task { @MainActor in
+                            try? await session.insert(transfer)
+                        }
+                    }
+                )
+                .id(selection.id)
+                .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+            } else {
+                ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
+            }
+        }
+        .environment(torahHost)
         .onChange(of: composer.pendingOpenLeaf) { _, newValue in
             // Wait for the create sheet to finish dismissing before
             // pushing, otherwise SwiftUI can race the path update
@@ -472,6 +497,7 @@ public struct LibraryView: View {
             // zero tabs left. Direct @State mutation actually pops the
             // NavigationStack (a $model.path binding wouldn't).
             path.removeAll()
+            torahHost.clearAll()
         }
         .onReceive(NotificationCenter.default.publisher(
             for: Composer.popToDocNotification)) { note in
@@ -481,8 +507,24 @@ public struct LibraryView: View {
             guard let target = note.userInfo?["leafId"] as? String,
                   let idx = path.firstIndex(of: .leaf(target)) else { return }
             path = Array(path.prefix(idx + 1))
+            let currentLeafIds = Set(path.compactMap { route -> String? in
+                if case .leaf(let id) = route { return id }
+                return nil
+            })
+            torahHost.prune(keepingLeafIds: currentLeafIds)
+            torahHost.setActiveLeafId(target)
         }
         .onChange(of: path) { oldPath, newPath in
+            let currentLeafIds = Set(newPath.compactMap { route -> String? in
+                if case .leaf(let id) = route { return id }
+                return nil
+            })
+            torahHost.prune(keepingLeafIds: currentLeafIds)
+            if case .leaf(let topLeafId) = newPath.last {
+                torahHost.setActiveLeafId(topLeafId)
+            } else {
+                torahHost.setActiveLeafId(nil)
+            }
             // Mark every newly-pushed leaf as "open" in the switcher.
             // We do it here (in response to an explicit path change),
             // NOT inside the NavigationLink destination — that closure

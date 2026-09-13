@@ -27,7 +27,6 @@ public struct LeafView: View {
     /// so a parallel entry in the leaf's own toolbar is required.
     @Environment(ReaderMode.self) var readerMode
     @Environment(AmbientLight.self) var ambientLight
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Read-only here — drives the optional spotlight tint applied in
     /// `blockListRow`. The setting is owned at the app level so every
     /// leaf picks the same look without having to re-fetch it.
@@ -45,14 +44,14 @@ public struct LeafView: View {
     @Environment(\.dismiss) var dismiss
     /// Drives the flush-on-background below.
     @Environment(\.scenePhase) var scenePhase
+    @Environment(TorahInspectorHost.self) private var torahHost: TorahInspectorHost?
     @State var showingBlockPicker = false
     @State var torahTarget: TorahTarget?
     @State var torahSearchKind: TorahAssociationKind?
     @State var torahPreviewRevision = 0
     @State var torahSourceQuotes: [String: TorahAssociation] = [:]
     @State var torahErrorMessage: String?
-    @State private var torahInspectorCoordinator = TorahInspectorCoordinator()
-    @State private var torahInsertionBridge = TorahDocumentInsertionBridge()
+    @State private var torahInsertionBridge: TorahDocumentInsertionBridge
     @State var targetedDropBlockId: String? = nil
     @State private var pendingInspectorRequest: TorahInspectorSelection?
 
@@ -63,9 +62,11 @@ public struct LeafView: View {
     }
 
     func requestOpenTorahInspector(_ selection: TorahInspectorSelection, blockId: String? = nil) {
+        torahHost?.setActiveLeafId(vm.leafId)
+        torahHost?.register(session: torahInsertionBridge)
         let anchorBlockId = blockId ?? vm.activeBlockId
         torahInsertionBridge.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: anchorBlockId)
-        torahInspectorCoordinator.open(selection)
+        torahInsertionBridge.coordinator.open(selection)
     }
     @State var editMode: EditMode = .inactive
     @State var focusTitle = false
@@ -167,6 +168,7 @@ public struct LeafView: View {
         self.vm = vm
         _documentIcon = State(initialValue: UserDefaults.standard.string(forKey: iconKey))
         _recentEmojis = State(initialValue: loadRecentEmojis())
+        _torahInsertionBridge = State(initialValue: TorahDocumentInsertionBridge(leafId: leafId))
         self.lockKey = lockKey
         self.iconKey = iconKey
         self.onDisappear = onDisappear
@@ -249,38 +251,8 @@ public struct LeafView: View {
                 }
             }
         }
-        .adaptiveTorahPresentation(
-            isRegularWidth: horizontalSizeClass == .regular,
-            isPresented: Binding(
-                get: { torahInspectorCoordinator.isPresented },
-                set: { if !$0 { torahInspectorCoordinator.close() } }
-            ),
-            content: {
-                torahSourcePresentationContent
-            }
-        )
-        .environment(torahInspectorCoordinator)
+        .environment(torahInsertionBridge.coordinator)
         .environment(torahInsertionBridge)
-    }
-
-    @ViewBuilder
-    private var torahSourcePresentationContent: some View {
-        if let selection = torahInspectorCoordinator.selection,
-           let databasePath = store.activeDatabasePath {
-            TorahInspectorView(
-                databasePath: databasePath,
-                selection: selection,
-                onClose: { torahInspectorCoordinator.close() },
-                onInsertSegment: { transfer in
-                    Task { @MainActor in
-                        try? await torahInsertionBridge.insert(transfer)
-                    }
-                }
-            )
-            .id(selection.id)
-        } else {
-            ContentUnavailableView(TorahStrings.storageUnavailable, systemImage: "exclamationmark.triangle")
-        }
     }
 
     // ── Main list ────────────────────────────────────────────────────────────
@@ -637,9 +609,14 @@ public struct LeafView: View {
         // a popover is showing → hide the glass overlays so the menu
         // renders bright. When our main window becomes key again,
         // the popover dismissed → restore the overlays.
+        .task {
+            torahInsertionBridge.databasePath = store.activeDatabasePath
+            torahHost?.register(session: torahInsertionBridge)
+        }
         .onAppear {
             vm.load()
             composer.currentContext = .leaf(id: vm.leafId)
+            torahInsertionBridge.databasePath = store.activeDatabasePath
             torahInsertionBridge.activeAnchor = TorahDocumentInsertionAnchor(leafId: vm.leafId, blockId: vm.activeBlockId)
             torahInsertionBridge.onInsert = { [weak vm] transfer, anchor in
                 guard let vm, let path = store.activeDatabasePath else { return }
@@ -1114,22 +1091,3 @@ public struct LeafView: View {
     static func iconKeyFor(leafId: String) -> String { "leaf.icon.\(leafId)" }
 }
 
-extension View {
-    @ViewBuilder
-    fileprivate func adaptiveTorahPresentation(
-        isRegularWidth: Bool,
-        isPresented: Binding<Bool>,
-        @ViewBuilder content: @escaping () -> some View
-    ) -> some View {
-        if isRegularWidth {
-            self.inspector(isPresented: isPresented) {
-                content()
-                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
-            }
-        } else {
-            self.sheet(isPresented: isPresented) {
-                content()
-            }
-        }
-    }
-}

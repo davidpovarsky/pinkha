@@ -35,7 +35,7 @@ final class TorahAssociationsUITests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        search.typeText(query)
+        search.typeText(query + "\n")
     }
 
     private func addFromLeaf(_ kind: String, query: String, resultIdentifier: String, app: XCUIApplication) {
@@ -43,6 +43,8 @@ final class TorahAssociationsUITests: XCTestCase {
         enter(query, app: app)
         let row = app.buttons[resultIdentifier]
         XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+        let searchSheet = app.descendants(matching: .any)["torah\(kind)SearchSheet"]
+        XCTAssertTrue(searchSheet.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["torahAddLinkButton"].waitForExistence(timeout: 5))
     }
 
@@ -58,6 +60,8 @@ final class TorahAssociationsUITests: XCTestCase {
         result.tap()
 
         XCTAssertFalse(app.alerts["Error"].waitForExistence(timeout: 1))
+        let searchSheet = app.descendants(matching: .any)["torahRefSearchSheet"]
+        XCTAssertTrue(searchSheet.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["torahAddLinkButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["ראש השנה ט״ז ב׳"].waitForExistence(timeout: 5))
     }
@@ -112,6 +116,8 @@ final class TorahAssociationsUITests: XCTestCase {
         enter("Genesis 1:1", app: app)
         let result = app.buttons["torahReferenceResult.Genesis 1:1"]
         XCTAssertTrue(result.waitForExistence(timeout: 5)); result.tap()
+        let searchSheet = app.descendants(matching: .any)["torahRefSearchSheet"]
+        XCTAssertTrue(searchSheet.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["torahAssociationSheet"].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
 
