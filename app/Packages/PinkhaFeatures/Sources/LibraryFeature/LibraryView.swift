@@ -24,6 +24,8 @@ public struct LibraryView: View {
     @Environment(AppSettings.self) var settings
     @Environment(TabManager.self) var tabManager
     @State private var showingSettings = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .detail
     /// Programmatic navigation stack so a freshly-created leaf can be
     /// pushed onto the editor right after the create sheet dismisses
     /// — driven by `composer.pendingOpenLeaf`. Must stay `@State` here :
@@ -386,6 +388,7 @@ public struct LibraryView: View {
         .scrollEdgeEffectStyle(.soft, for: .all)
         .databaseDeleteDialog(pending: $pendingBookDeletion, store: store)
         .shelfDeleteDialog(pending: $pendingShelfDeletion, store: store)
+        .toolbar(removing: .sidebarToggle)
         .toolbar { toolbarContent }
         // Le store est injecté EXPLICITEMENT : une feuille iOS 26 ne
         // propage pas de façon fiable l'environnement de la vue qui la
@@ -451,9 +454,19 @@ public struct LibraryView: View {
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
-            stackContent
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
+            Color.clear
+                .navigationSplitViewColumnWidth(0)
+                .toolbar(.hidden, for: .navigationBar)
+        } detail: {
+            NavigationStack(path: $path) {
+                stackContent
+            }
         }
+        .navigationSplitViewStyle(.balanced)
         .onChange(of: composer.pendingOpenLeaf) { _, newValue in
             // Wait for the create sheet to finish dismissing before
             // pushing, otherwise SwiftUI can race the path update

@@ -27,7 +27,6 @@ public struct LeafView: View {
     /// so a parallel entry in the leaf's own toolbar is required.
     @Environment(ReaderMode.self) var readerMode
     @Environment(AmbientLight.self) var ambientLight
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Read-only here — drives the optional spotlight tint applied in
     /// `blockListRow`. The setting is owned at the app level so every
     /// leaf picks the same look without having to re-fetch it.
@@ -249,16 +248,13 @@ public struct LeafView: View {
                 }
             }
         }
-        .adaptiveTorahPresentation(
-            isRegularWidth: horizontalSizeClass == .regular,
-            isPresented: Binding(
-                get: { torahInspectorCoordinator.isPresented },
-                set: { if !$0 { torahInspectorCoordinator.close() } }
-            ),
-            content: {
-                torahSourcePresentationContent
-            }
-        )
+        .inspector(isPresented: Binding(
+            get: { torahInspectorCoordinator.isPresented },
+            set: { if !$0 { torahInspectorCoordinator.close() } }
+        )) {
+            torahSourcePresentationContent
+                .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
+        }
         .environment(torahInspectorCoordinator)
         .environment(torahInsertionBridge)
     }
@@ -1114,22 +1110,3 @@ public struct LeafView: View {
     static func iconKeyFor(leafId: String) -> String { "leaf.icon.\(leafId)" }
 }
 
-extension View {
-    @ViewBuilder
-    fileprivate func adaptiveTorahPresentation(
-        isRegularWidth: Bool,
-        isPresented: Binding<Bool>,
-        @ViewBuilder content: @escaping () -> some View
-    ) -> some View {
-        if isRegularWidth {
-            self.inspector(isPresented: isPresented) {
-                content()
-                    .inspectorColumnWidth(min: 320, ideal: 410, max: 560)
-            }
-        } else {
-            self.sheet(isPresented: isPresented) {
-                content()
-            }
-        }
-    }
-}
