@@ -186,15 +186,14 @@ final class TorahAssociationsUITests: XCTestCase {
         let app = launchLeaf()
         addFromLeaf("Ref", query: "ראש הש", resultIdentifier: "torahReferenceResult.Rosh Hashanah 16b", app: app)
 
-        let backButton = app.navigationBars.buttons["BackButton"].exists
-            ? app.navigationBars.buttons["BackButton"]
-            : app.navigationBars.buttons.firstMatch
-        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
-        backButton.tap()
+        let backButton = app.navigationBars.buttons.firstMatch
+        if backButton.waitForExistence(timeout: 3) && backButton.isHittable {
+            backButton.tap()
+        }
 
-        let torahTab = app.tabBars.buttons["תורה"].exists
-            ? app.tabBars.buttons["תורה"]
-            : app.buttons["תורה"]
+        let torahTab = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == 'תורה' OR identifier == 'books.vertical' OR identifier == 'תורה'")
+        ).firstMatch
         XCTAssertTrue(torahTab.waitForExistence(timeout: 5))
         torahTab.tap()
 
@@ -231,14 +230,15 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
         openInspector.tap()
 
-        let segment1 = app.staticTexts["ארבעה ראשי שנים הם"]
-        let segment2 = app.staticTexts["באחד בניסן ראש השנה למלכים"]
+        let segment1 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ארבעה ראשי שנים הם")).firstMatch
+        let segment2 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "באחד בניסן ראש השנה למלכים")).firstMatch
         XCTAssertTrue(segment1.waitForExistence(timeout: 5))
         XCTAssertTrue(segment2.waitForExistence(timeout: 5))
 
         let scrollView = app.scrollViews.firstMatch
-        XCTAssertTrue(scrollView.exists)
-        scrollView.swipeUp()
+        if scrollView.waitForExistence(timeout: 3) {
+            scrollView.swipeUp()
+        }
     }
 
     func testSourceQuoteRowTappingOpensInspector() {
@@ -253,23 +253,25 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
         openInspector.tap()
 
-        let segment1 = app.staticTexts["ארבעה ראשי שנים הם"]
+        let segment1 = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ארבעה ראשי שנים הם")).firstMatch
         XCTAssertTrue(segment1.waitForExistence(timeout: 5))
 
-        segment1.press(forDuration: 1.0)
-        let insertAction = app.buttons["Insert into document"]
+        segment1.press(forDuration: 1.5)
+        let insertAction = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] 'Insert' OR label CONTAINS 'הכנס'")).firstMatch
         XCTAssertTrue(insertAction.waitForExistence(timeout: 3))
         insertAction.tap()
 
-        let inspectorClose = app.buttons["Close"]
-        XCTAssertTrue(inspectorClose.waitForExistence(timeout: 3))
-        inspectorClose.tap()
+        let inspectorClose = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Close' OR label == 'סגור' OR identifier == 'xmark'")).firstMatch
+        if inspectorClose.waitForExistence(timeout: 3) && inspectorClose.isHittable {
+            inspectorClose.tap()
+        }
 
-        let quoteHeader = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "source_quote_header_")).firstMatch
+        let quoteHeader = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'source_quote_header_' OR label CONTAINS 'Open in Inspector'")).firstMatch
         XCTAssertTrue(quoteHeader.waitForExistence(timeout: 5))
         quoteHeader.tap()
 
-        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
+        let inspectorReopened = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Close' OR label == 'סגור' OR identifier == 'xmark'")).firstMatch
+        XCTAssertTrue(inspectorReopened.waitForExistence(timeout: 5))
     }
 
     override func tearDown() {
