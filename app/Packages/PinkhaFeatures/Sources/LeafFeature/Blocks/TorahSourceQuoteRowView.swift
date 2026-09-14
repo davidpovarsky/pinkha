@@ -20,33 +20,35 @@ public struct TorahSourceQuoteRowView: View {
     public var body: some View {
         QuoteChrome {
             VStack(alignment: .leading, spacing: spacingS) {
-                HStack(alignment: .center, spacing: spacingXS) {
-                    Image(systemName: "book.closed")
-                        .foregroundStyle(Color.pinkhaLabelSecondary)
-                        .font(.caption2)
-                    
-                    Text(association.labelHe)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.pinkhaLabelSecondary)
-                    
-                    Spacer()
-                    
-                    Button {
-                        onOpen(.init(
-                            providerID: association.providerID,
-                            canonicalRef: association.canonicalKey,
-                            preferredSegmentRef: association.canonicalKey
-                        ))
-                    } label: {
+                Button {
+                    let sectionRef = TorahReferenceUtil.sectionRef(from: association.canonicalKey)
+                    onOpen(.init(
+                        providerID: association.providerID,
+                        canonicalRef: sectionRef,
+                        preferredSegmentRef: association.canonicalKey
+                    ))
+                } label: {
+                    HStack(alignment: .center, spacing: spacingXS) {
+                        Image(systemName: "book.closed")
+                            .foregroundStyle(Color.pinkhaLabelSecondary)
+                            .font(.caption2)
+                        
+                        Text(association.labelHe)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.pinkhaLabelSecondary)
+                        
+                        Spacer()
+                        
                         Image(systemName: "arrow.up.forward.app")
                             .font(.caption)
                             .foregroundStyle(Color.pinkhaLabelTertiary)
                             .padding(spacingXS)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open in Inspector")
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open in Inspector")
+                .accessibilityIdentifier("source_quote_header_\(association.canonicalKey)")
                 .environment(\.layoutDirection, .rightToLeft)
                 
                 Text(text)

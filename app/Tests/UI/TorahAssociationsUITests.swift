@@ -182,6 +182,96 @@ final class TorahAssociationsUITests: XCTestCase {
         XCTAssertFalse(inspectorClose.exists)
     }
 
+    func testTorahKnowledgeTabDisplaysAssociatedDocumentsInHierarchy() {
+        let app = launchLeaf()
+        addFromLeaf("Ref", query: "ראש הש", resultIdentifier: "torahReferenceResult.Rosh Hashanah 16b", app: app)
+
+        let backButton = app.navigationBars.buttons["BackButton"].exists
+            ? app.navigationBars.buttons["BackButton"]
+            : app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
+        backButton.tap()
+
+        let torahTab = app.tabBars.buttons["תורה"].exists
+            ? app.tabBars.buttons["תורה"]
+            : app.buttons["תורה"]
+        XCTAssertTrue(torahTab.waitForExistence(timeout: 5))
+        torahTab.tap()
+
+        XCTAssertFalse(app.staticTexts["אין מקורות"].waitForExistence(timeout: 2))
+
+        let talmudNode = app.staticTexts["תלמוד"]
+        let rhNode = app.staticTexts["ראש השנה"]
+        if talmudNode.waitForExistence(timeout: 5) {
+            talmudNode.tap()
+        }
+        XCTAssertTrue(rhNode.waitForExistence(timeout: 5))
+        rhNode.tap()
+
+        let verseNode = app.staticTexts["ראש השנה ט״ז ב׳"]
+        XCTAssertTrue(verseNode.waitForExistence(timeout: 5))
+        verseNode.tap()
+
+        let sheetDoc = app.staticTexts["Seeded Leaf 1"]
+        XCTAssertTrue(sheetDoc.waitForExistence(timeout: 5))
+        sheetDoc.tap()
+
+        XCTAssertTrue(app.buttons["torahAddLinkButton"].waitForExistence(timeout: 5))
+    }
+
+    func testInspectorShowsFullSectionAndContinuousScroll() {
+        let app = launchLeaf()
+        addFromLeaf("Ref", query: "ראש הש", resultIdentifier: "torahReferenceResult.Rosh Hashanah 16b", app: app)
+
+        let refPreview = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "torahLeafPreviewRow.")).firstMatch
+        XCTAssertTrue(refPreview.waitForExistence(timeout: 5))
+
+        refPreview.press(forDuration: 1.0)
+        let openInspector = app.buttons["Open in Inspector"]
+        XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
+        openInspector.tap()
+
+        let segment1 = app.staticTexts["ארבעה ראשי שנים הם"]
+        let segment2 = app.staticTexts["באחד בניסן ראש השנה למלכים"]
+        XCTAssertTrue(segment1.waitForExistence(timeout: 5))
+        XCTAssertTrue(segment2.waitForExistence(timeout: 5))
+
+        let scrollView = app.scrollViews.firstMatch
+        XCTAssertTrue(scrollView.exists)
+        scrollView.swipeUp()
+    }
+
+    func testSourceQuoteRowTappingOpensInspector() {
+        let app = launchLeaf()
+        addFromLeaf("Ref", query: "ראש הש", resultIdentifier: "torahReferenceResult.Rosh Hashanah 16b", app: app)
+
+        let refPreview = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "torahLeafPreviewRow.")).firstMatch
+        XCTAssertTrue(refPreview.waitForExistence(timeout: 5))
+
+        refPreview.press(forDuration: 1.0)
+        let openInspector = app.buttons["Open in Inspector"]
+        XCTAssertTrue(openInspector.waitForExistence(timeout: 3))
+        openInspector.tap()
+
+        let segment1 = app.staticTexts["ארבעה ראשי שנים הם"]
+        XCTAssertTrue(segment1.waitForExistence(timeout: 5))
+
+        segment1.press(forDuration: 1.0)
+        let insertAction = app.buttons["Insert into document"]
+        XCTAssertTrue(insertAction.waitForExistence(timeout: 3))
+        insertAction.tap()
+
+        let inspectorClose = app.buttons["Close"]
+        XCTAssertTrue(inspectorClose.waitForExistence(timeout: 3))
+        inspectorClose.tap()
+
+        let quoteHeader = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "source_quote_header_")).firstMatch
+        XCTAssertTrue(quoteHeader.waitForExistence(timeout: 5))
+        quoteHeader.tap()
+
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
+    }
+
     override func tearDown() {
         if testRun?.hasSucceeded == false {
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

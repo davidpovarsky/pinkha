@@ -95,34 +95,119 @@ public extension TorahSourceHierarchy {
     /// Filter the hierarchy to only include branches that lead to at least one
     /// Pinkha page association. Annotates nodes with descendant leaf counts.
     ///
-    /// - Parameter associatedKeys: Set of canonical keys that have Pinkha associations.
+    /// - Parameters:
+    ///   - associatedKeys: Set of canonical keys that have Pinkha associations.
+    ///   - associationGroups: Optional list of distinct association groups with labels and leaf counts.
     /// - Returns: A new hierarchy containing only relevant branches.
-    func filtered(byAssociatedKeys associatedKeys: Set<String>) -> TorahSourceHierarchy {
-        let filteredRoots = roots.compactMap { $0.filtered(byAssociatedKeys: associatedKeys) }
+    func filtered(
+        byAssociatedKeys associatedKeys: Set<String>,
+        associationGroups: [(canonicalKey: String, labelHe: String, leafCount: Int)] = []
+    ) -> TorahSourceHierarchy {
+        let filteredRoots = roots.compactMap {
+            $0.filtered(byAssociatedKeys: associatedKeys, associationGroups: associationGroups)
+        }
         return TorahSourceHierarchy(roots: filteredRoots, providerID: providerID, fetchedAt: fetchedAt)
     }
 }
 
 private extension TorahSourceNode {
-    /// Recursively filter: keep nodes whose canonical key is in the set,
-    /// or whose descendants include associated keys. Annotates counts.
-    func filtered(byAssociatedKeys keys: Set<String>) -> TorahSourceNode? {
-        let directMatch = canonicalKey.map { keys.contains($0) } ?? false
-        let filteredChildren = children.compactMap { $0.filtered(byAssociatedKeys: keys) }
+    /// Recursively filter: keep nodes whose canonical key matches (either exactly or as a book-level prefix
+    /// for passage associations), or whose descendants include associated keys.
+    func filtered(
+        byAssociatedKeys keys: Set<String>,
+        associationGroups: [(canonicalKey: String, labelHe: String, leafCount: Int)]
+    ) -> TorahSourceNode? {
+        if children.isEmpty {
+            // Terminal node in the provider's hierarchy (e.g., a book/tractate like "Genesis")
+            guard let canonicalKey else { return nil }
 
-        if !directMatch && filteredChildren.isEmpty { return nil }
+            let matchingGroups = associationGroups.filter { group in
+                group.canonicalKey == canonicalKey
+                    || TorahReferenceUtil.bookTitle(from: group.canonicalKey) == canonicalKey
+                    || group.canonicalKey.hasPrefix(canonicalKey + " ")
+                    || group.canonicalKey.hasPrefix(canonicalKey + ":")
+            }
 
-        let childLeafCount = filteredChildren.reduce(0) { $0 + $1.descendantLeafCount }
-        let totalCount = (directMatch ? 1 : 0) + childLeafCount
+            let matchingKeys: Set<String>
+            if !matchingGroups.isEmpty {
+                matchingKeys = Set(matchingGroups.map(\.canonicalKey))
+            } else {
+                matchingKeys = keys.filter { key in
+                    key == canonicalKey
+                        || TorahReferenceUtil.bookTitle(from: key) == canonicalKey
+                        || key.hasPrefix(canonicalKey + " ")
+                        || key.hasPrefix(canonicalKey + ":")
+                }
+            }
 
-        return TorahSourceNode(
-            id: id,
-            labelHe: labelHe,
-            labelEn: labelEn,
-            canonicalKey: canonicalKey,
-            children: filteredChildren,
-            descendantLeafCount: totalCount,
-            hasDirectLeaves: directMatch
-        )
+            guard !matchingKeys.isEmpty else { return nil }
+
+            let directBookMatch = matchingKeys.contains(canonicalKey)
+            let subKeys = matchingKeys.filter { $0 != canonicalKey }
+
+            var childNodes: [TorahSourceNode] = []
+            var totalLeafCount = 0
+
+            if !matchingGroups.isEmpty {
+                for group in matchingGroups {
+                    totalLeafCount += group.leafCount
+                    if group.canonicalKey != canonicalKey {
+                        childNodes.append(TorahSourceNode(
+                            id: "\(id)/\(group.canonicalKey)",
+                            labelHe: group.labelHe,
+                            labelEn: group.canonicalKey,
+                            canonicalKey: group.canonicalKey,
+                            children: [],
+                            descendantLeafCount: group.leafCount,
+                            hasDirectLeaves: true
+                        ))
+                    }
+                }
+            } else {
+                totalLeafCount = matchingKeys.count
+                for subKey in subKeys {
+                    childNodes.append(TorahSourceNode(
+                        id: "\(id)/\(subKey)",
+                        labelHe: subKey,
+                        labelEn: subKey,
+                        canonicalKey: subKey,
+                        children: [],
+                        descendantLeafCount: 1,
+                        hasDirectLeaves: true
+                    ))
+                }
+            }
+
+            childNodes.sort { $0.labelHe < $1.labelHe }
+            let hasDirectLeaves = directBookMatch || childNodes.isEmpty
+
+            return TorahSourceNode(
+                id: id,
+                labelHe: labelHe,
+                labelEn: labelEn,
+                canonicalKey: canonicalKey,
+                children: childNodes,
+                descendantLeafCount: totalLeafCount,
+                hasDirectLeaves: hasDirectLeaves
+            )
+        } else {
+            // Category / structural node (e.g. "Tanakh", "Torah")
+            let filteredChildren = children.compactMap {
+                $0.filtered(byAssociatedKeys: keys, associationGroups: associationGroups)
+            }
+            guard !filteredChildren.isEmpty else { return nil }
+
+            let totalCount = filteredChildren.reduce(0) { $0 + $1.descendantLeafCount }
+
+            return TorahSourceNode(
+                id: id,
+                labelHe: labelHe,
+                labelEn: labelEn,
+                canonicalKey: canonicalKey,
+                children: filteredChildren,
+                descendantLeafCount: totalCount,
+                hasDirectLeaves: false
+            )
+        }
     }
 }

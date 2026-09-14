@@ -89,7 +89,7 @@ public extension TorahSourceNode {
     /// Example: if `תלמוד -> בבלי -> ראשונים -> רמב"ן` each have one child,
     /// the UI jumps directly to the first meaningful branch.
     var compressedChildren: [TorahSourceNode] {
-        if children.count == 1 && !hasDirectLeaves {
+        if children.count == 1 && !hasDirectLeaves && canonicalKey == nil {
             return [children[0].compressedTarget]
         }
         return children
@@ -99,7 +99,7 @@ public extension TorahSourceNode {
     /// returns the first meaningful descendant (node with multiple children
     /// or direct leaves). Used for auto-descent in the UI.
     var compressedTarget: TorahSourceNode {
-        if children.count == 1 && !hasDirectLeaves {
+        if children.count == 1 && !hasDirectLeaves && canonicalKey == nil {
             return children[0].compressedTarget
         }
         return self
@@ -110,7 +110,7 @@ public extension TorahSourceNode {
     func compressedPath() -> TorahSourcePath {
         var segments: [TorahSourceNode] = [self]
         var current = self
-        while current.children.count == 1 && !current.hasDirectLeaves {
+        while current.children.count == 1 && !current.hasDirectLeaves && current.canonicalKey == nil {
             current = current.children[0]
             segments.append(current)
         }

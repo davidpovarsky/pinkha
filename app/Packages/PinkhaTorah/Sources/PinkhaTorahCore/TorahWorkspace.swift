@@ -64,6 +64,10 @@ public final class TorahWorkspace {
     public func fetchText(reference: String, providerID: String? = nil, request: TorahTextRequest = TorahTextRequest()) async throws -> TorahTextDocument {
         try await registry.text(providerID).fetchText(reference: reference, request: request)
     }
+    public func fetchSectionText(reference: String, providerID: String? = nil, request: TorahTextRequest = TorahTextRequest()) async throws -> TorahTextDocument {
+        let sectionRef = TorahReferenceUtil.sectionRef(from: reference)
+        return try await fetchText(reference: sectionRef, providerID: providerID, request: request)
+    }
     public func links(for reference: String, providerID: String? = nil) async throws -> [TorahLinkedSource] {
         try await registry.relationship(providerID).links(for: reference)
     }

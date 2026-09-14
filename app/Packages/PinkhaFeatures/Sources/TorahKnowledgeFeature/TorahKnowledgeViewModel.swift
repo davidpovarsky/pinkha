@@ -73,10 +73,15 @@ public final class TorahKnowledgeViewModel {
 
     private func loadSourceHierarchy(workspace: TorahWorkspace) async throws {
         let store = try TorahStore(databasePath: databasePath)
-        let provider = SefariaHierarchyProvider(store: store)
+        let provider: any TorahHierarchyProvider
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-torah-provider") {
+            provider = FixtureHierarchyProvider(store: store)
+        } else {
+            provider = SefariaHierarchyProvider(store: store)
+        }
         hierarchyProvider = provider
 
-        // Fetch the full Sefaria hierarchy (cached)
+        // Fetch the full hierarchy (cached)
         let fullHierarchy = try await provider.fetchHierarchy()
 
         // Get user's source associations to filter the hierarchy
@@ -84,7 +89,7 @@ public final class TorahKnowledgeViewModel {
         let associatedKeys = Set(sourceGroups.map(\.canonicalKey))
 
         // Filter hierarchy to only show branches with user associations
-        filteredHierarchy = fullHierarchy.filtered(byAssociatedKeys: associatedKeys)
+        filteredHierarchy = fullHierarchy.filtered(byAssociatedKeys: associatedKeys, associationGroups: sourceGroups)
     }
 
     private func loadWordGroups(workspace: TorahWorkspace) async throws {

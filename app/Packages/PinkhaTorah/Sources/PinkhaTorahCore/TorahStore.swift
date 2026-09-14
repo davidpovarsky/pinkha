@@ -232,11 +232,20 @@ public actor TorahStore {
     }
 
     /// Distinct leaf IDs associated with a specific canonical key and kind.
+    /// Matches exact key as well as sub-references (e.g. book matching its chapters/verses).
     public func leafIDs(forCanonicalKey key: String, kind: TorahAssociationKind) throws -> [String] {
-        let sql = "SELECT DISTINCT leaf_id FROM torah_associations WHERE canonical_key = ? AND kind = ? ORDER BY created_at DESC"
+        let sql = """
+        SELECT DISTINCT leaf_id FROM torah_associations
+        WHERE (canonical_key = ? OR canonical_key LIKE ? || ' %' OR canonical_key LIKE ? || ':%')
+          AND kind = ?
+        ORDER BY created_at DESC
+        """
         let statement = try prepare(sql)
         defer { sqlite3_finalize(statement) }
-        bind(key, at: 1, to: statement); bind(kind.rawValue, at: 2, to: statement)
+        bind(key, at: 1, to: statement)
+        bind(key, at: 2, to: statement)
+        bind(key, at: 3, to: statement)
+        bind(kind.rawValue, at: 4, to: statement)
         var result: [String] = []
         while sqlite3_step(statement) == SQLITE_ROW { result.append(text(statement, 0)) }
         return result

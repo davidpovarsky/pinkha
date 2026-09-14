@@ -84,9 +84,10 @@ public struct TorahSourceQuoteView: View {
 
     public var body: some View {
         Button {
+            let sectionRef = TorahReferenceUtil.sectionRef(from: association.canonicalKey)
             onOpen(.init(
                 providerID: association.providerID,
-                canonicalRef: association.canonicalKey,
+                canonicalRef: sectionRef,
                 preferredSegmentRef: association.canonicalKey
             ))
         } label: {

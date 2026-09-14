@@ -226,4 +226,113 @@ struct TorahKnowledgeHierarchyTests {
         )
         #expect(singleDepth.isEmbeddableSource == true)
     }
+
+    // MARK: - TorahReferenceUtil Tests
+
+    @Test func torahReferenceUtilExtraction() {
+        #expect(TorahReferenceUtil.bookTitle(from: "Genesis 1:1") == "Genesis")
+        #expect(TorahReferenceUtil.bookTitle(from: "Genesis 1") == "Genesis")
+        #expect(TorahReferenceUtil.bookTitle(from: "Genesis") == "Genesis")
+        #expect(TorahReferenceUtil.bookTitle(from: "Rosh Hashanah 16b") == "Rosh Hashanah")
+        #expect(TorahReferenceUtil.bookTitle(from: "Rosh Hashanah 16b:1") == "Rosh Hashanah")
+        #expect(TorahReferenceUtil.bookTitle(from: "I Kings 3:1") == "I Kings")
+        #expect(TorahReferenceUtil.bookTitle(from: "Song of Songs 1:1") == "Song of Songs")
+
+        #expect(TorahReferenceUtil.sectionRef(from: "Genesis 1:5") == "Genesis 1")
+        #expect(TorahReferenceUtil.sectionRef(from: "Genesis 1") == "Genesis 1")
+        #expect(TorahReferenceUtil.sectionRef(from: "Berakhot 2a:1") == "Berakhot 2a")
+        #expect(TorahReferenceUtil.sectionRef(from: "Rosh Hashanah 16b") == "Rosh Hashanah 16b")
+
+        #expect(TorahReferenceUtil.isSegmentRef("Genesis 1:5") == true)
+        #expect(TorahReferenceUtil.isSegmentRef("Genesis 1") == false)
+    }
+
+    // MARK: - Book-Level Leaf Query Matches Associated Verses
+
+    @Test func storeLeafIDsQueryMatchesSubReferences() async throws {
+        let (directory, path) = try temporaryDatabase()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = try TorahStore(databasePath: path)
+
+        let leaf1 = TorahTarget.leaf("leaf-verse-1")
+        try await store.add(TorahAssociation(
+            target: leaf1, kind: .ref, providerID: "sefaria",
+            externalID: "Genesis 1:1", canonicalKey: "Genesis 1:1", labelHe: "בראשית א׳:א׳"
+        ))
+
+        let leaf2 = TorahTarget.leaf("leaf-verse-2")
+        try await store.add(TorahAssociation(
+            target: leaf2, kind: .ref, providerID: "sefaria",
+            externalID: "Genesis 1:5", canonicalKey: "Genesis 1:5", labelHe: "בראשית א׳:ה׳"
+        ))
+
+        let leaf3 = TorahTarget.leaf("leaf-talmud")
+        try await store.add(TorahAssociation(
+            target: leaf3, kind: .ref, providerID: "sefaria",
+            externalID: "Rosh Hashanah 16b", canonicalKey: "Rosh Hashanah 16b", labelHe: "ראש השנה ט״ז ב׳"
+        ))
+
+        // Querying by book title "Genesis" finds both verse associations!
+        let bookLeaves = try await store.leafIDs(forCanonicalKey: "Genesis", kind: .ref)
+        #expect(Set(bookLeaves) == Set(["leaf-verse-1", "leaf-verse-2"]))
+
+        // Querying by section "Genesis 1" finds both verse associations!
+        let sectionLeaves = try await store.leafIDs(forCanonicalKey: "Genesis 1", kind: .ref)
+        #expect(Set(sectionLeaves) == Set(["leaf-verse-1", "leaf-verse-2"]))
+
+        // Querying exact verse "Genesis 1:1" finds only leaf1!
+        let verseLeaves = try await store.leafIDs(forCanonicalKey: "Genesis 1:1", kind: .ref)
+        #expect(verseLeaves == ["leaf-verse-1"])
+
+        // Querying "Rosh Hashanah" finds leaf3!
+        let talmudLeaves = try await store.leafIDs(forCanonicalKey: "Rosh Hashanah", kind: .ref)
+        #expect(talmudLeaves == ["leaf-talmud"])
+    }
+
+    // MARK: - Hierarchy Filtering with Verse Associations
+
+    @Test func hierarchyFilteredWithVerseAssociationsPreservesBooksAndCreatesChildren() {
+        let genesisBook = TorahSourceNode(id: "gen", labelHe: "בראשית", canonicalKey: "Genesis")
+        let exodusBook = TorahSourceNode(id: "exo", labelHe: "שמות", canonicalKey: "Exodus")
+        let torahCategory = TorahSourceNode(id: "torah", labelHe: "תורה", children: [genesisBook, exodusBook])
+        let hierarchy = TorahSourceHierarchy(roots: [torahCategory], providerID: "sefaria")
+
+        let associations = [
+            (canonicalKey: "Genesis 1:1", labelHe: "בראשית א׳:א׳", leafCount: 2),
+            (canonicalKey: "Genesis 2:4", labelHe: "בראשית ב׳:ד׳", leafCount: 1)
+        ]
+        let associatedKeys = Set(associations.map(\.canonicalKey))
+
+        let filtered = hierarchy.filtered(byAssociatedKeys: associatedKeys, associationGroups: associations)
+
+        #expect(filtered.roots.count == 1)
+        let root = filtered.roots[0]
+        #expect(root.id == "torah")
+        #expect(root.children.count == 1)
+
+        let book = root.children[0]
+        #expect(book.canonicalKey == "Genesis")
+        #expect(book.descendantLeafCount == 3)
+        #expect(book.children.count == 2)
+        #expect(book.children[0].canonicalKey == "Genesis 1:1")
+        #expect(book.children[0].descendantLeafCount == 2)
+        #expect(book.children[1].canonicalKey == "Genesis 2:4")
+        #expect(book.children[1].descendantLeafCount == 1)
+    }
+
+    // MARK: - Fetch Section Text via TorahWorkspace
+
+    @Test func fetchSectionTextLoadsFullSection() async throws {
+        let (directory, path) = try temporaryDatabase()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let workspace = try TorahWorkspace.application(databasePath: path, arguments: ["--ui-test-torah-provider"])
+
+        // Requesting section text for a verse "Genesis 1:5" fetches the entire chapter "Genesis 1"
+        let doc = try await workspace.fetchSectionText(reference: "Genesis 1:5")
+        #expect(doc.sectionRef == "Genesis 1")
+        #expect(doc.segments.count >= 3)
+        #expect(doc.nextSectionRef == "Genesis 2")
+    }
 }

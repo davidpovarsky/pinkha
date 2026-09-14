@@ -10,7 +10,7 @@ public extension TorahInspectorRepository {
             documentCapacity: documentCapacity,
             relationshipCapacity: relationshipCapacity,
             textFetcher: { reference, providerID in
-                try await workspace.fetchText(reference: reference, providerID: providerID)
+                try await workspace.fetchSectionText(reference: reference, providerID: providerID)
             },
             linksFetcher: { reference, providerID in
                 try await workspace.links(for: reference, providerID: providerID)
