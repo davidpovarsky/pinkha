@@ -90,13 +90,7 @@ public extension TorahSourceNode {
     /// the UI jumps directly to the first meaningful branch.
     var compressedChildren: [TorahSourceNode] {
         if children.count == 1 && !hasDirectLeaves {
-            let child = children[0]
-            if child.children.isEmpty && child.hasDirectLeaves {
-                // Terminal node with leaves — show it
-                return [child]
-            }
-            // Single-child passthrough — compress
-            return child.compressedChildren
+            return [children[0].compressedTarget]
         }
         return children
     }
