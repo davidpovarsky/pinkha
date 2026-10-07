@@ -38,7 +38,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # 1. Pull the code from the staging branch.
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Checkout source
         uses: actions/checkout@v7
         # Fetch full history so `git describe` / changelog helpers can
@@ -49,6 +56,14 @@ jobs:
       # 2. Pin the Xcode version. The macos-14 runner has several
       #    Xcodes installed ; this picks the one matching our minimum
       #    iOS SDK. Drop `xcode-version` to use whatever's default.
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -57,6 +72,14 @@ jobs:
       # 3. Ruby + Bundler. `bundler-cache: true` caches the gems
       #    install between runs so we don't re-download fastlane each
       #    time (saves ~1 minute per build).
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Setup Ruby + bundler cache
         uses: ruby/setup-ruby@v1
         with:
@@ -66,6 +89,14 @@ jobs:
       # 4. The actual build + upload. Every ENV here mirrors what
       #    `fastlane/.env` carries locally — the lane code itself is
       #    environment-agnostic.
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Build and upload to TestFlight
         env:
           # `ensure_git_branch` would fail on GitHub Actions because
@@ -95,6 +126,15 @@ jobs:
 
       # 5. Upload the .ipa as a workflow artifact for inspection /
       #    re-upload, kept 7 days. Convenient when ASC drops a build.
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Archive build artifacts
         if: always()
         uses: actions/upload-artifact@v7
