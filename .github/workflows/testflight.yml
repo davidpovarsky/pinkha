@@ -10,6 +10,7 @@ on:
         default: true
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -34,23 +35,63 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Show Apple toolchain
         run: |
           sw_vers
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,aarch64-apple-darwin
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Prepare build inputs and regenerate Xcode project
         shell: bash
         run: |
@@ -63,6 +104,14 @@ jobs:
           (cd app && xcodegen generate)
           python3 utilities/scripts/verify-apple-identity.py
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Compute build number
         shell: bash
         run: |
@@ -70,6 +119,15 @@ jobs:
           echo "BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
           echo "Using CFBundleVersion $build_number"
 
+      - name: Live Activity · refresh
+        if: ${{ inputs.upload_to_testflight }}
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Restore App Store Connect API key
         if: ${{ inputs.upload_to_testflight }}
         shell: bash
@@ -91,6 +149,14 @@ jobs:
           echo "ASC_ISSUER_ID=$ASC_ISSUER_ID_VALUE" >> "$GITHUB_ENV"
           echo "ASC_KEY_PATH=$key_path" >> "$GITHUB_ENV"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Import distribution certificate and all provisioning profiles
         shell: bash
         env:
@@ -163,6 +229,14 @@ jobs:
           install_profile widgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_B64" WIDGETS
           echo "SIGNING_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Signing and XcodeGen preflight
         shell: bash
         run: |
@@ -190,6 +264,14 @@ jobs:
           check_target ChavrusaNotesShare "$SHARE_BUNDLE_ID" "$SHARE_PROFILE_SPECIFIER" Extensions/Share/ChavrusaNotesShare.entitlements
           check_target ChavrusaNotesWidgets "$WIDGETS_BUNDLE_ID" "$WIDGETS_PROFILE_SPECIFIER" Extensions/Widgets/ChavrusaNotesWidgets.entitlements
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Diagnostic Release compile sweep across scheme and extension targets
         shell: bash
         run: |
@@ -243,6 +325,14 @@ jobs:
           fi
           echo "Diagnostic compile sweep passed for all targets and scheme"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Archive signed Release app
         shell: bash
         run: |
@@ -263,6 +353,14 @@ jobs:
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             | tee "$BUILD_DIR/logs/archive.log"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Export App Store Connect IPA
         shell: bash
         run: |
@@ -301,6 +399,14 @@ jobs:
           echo "IPA_PATH=$final_ipa" >> "$GITHUB_ENV"
           shasum -a 256 "$final_ipa" | tee "$final_ipa.sha256"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Verify archive, signatures, profiles, and entitlements
         shell: bash
         run: |
@@ -348,16 +454,43 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.siri' "$main_entitlements")" = true
           echo "Signed IPA verification passed for the app and both extensions"
 
+      - name: Live Activity · refresh
+        if: ${{ inputs.upload_to_testflight }}
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Validate with App Store Connect
         if: ${{ inputs.upload_to_testflight }}
         run: |
           xcrun altool --validate-app -f "$IPA_PATH" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 
+      - name: Live Activity · refresh
+        if: ${{ inputs.upload_to_testflight }}
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Upload to App Store Connect and TestFlight
         if: ${{ inputs.upload_to_testflight }}
         run: |
           xcrun altool --upload-app -f "$IPA_PATH" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 
+      - name: Live Activity · refresh
+        if: ${{ inputs.upload_to_testflight }}
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Verify uploaded build appears in TestFlight
         if: ${{ inputs.upload_to_testflight }}
         shell: bash
@@ -367,6 +500,15 @@ jobs:
           "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet 'PyJWT[crypto]==2.10.1'
           "$RUNNER_TEMP/asc-venv/bin/python" utilities/scripts/verify-testflight-build.py "$BUILD_NUMBER"
 
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Upload signed IPA and verification logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -380,6 +522,15 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Remove temporary signing material
         if: always()
         shell: bash
