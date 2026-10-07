@@ -16,21 +16,69 @@ jobs:
     name: Rust tests
     runs-on: ubuntu-latest
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - uses: actions/checkout@v7
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: cargo clippy (warnings as errors)
         # Mirrors the pre-commit hook so contributors can catch the same
         # lints locally before push. Both gates are kept in lockstep — any
         # tightening here should be applied to scripts/hooks/pre-commit too.
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Generated UniFFI bindings are up to date
         # Guards the failure mode that shipped a boot crash: a uniffi bump
         # changes the generated bindings, but the checked-in pinkha.swift is
@@ -69,6 +117,14 @@ jobs:
             echo "  mv swift-bindings/pinkha.swift app/Packages/PinkhaFFI/Sources/PinkhaFFI/"
             exit 1
           fi
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: cargo test + coverage gate (89%)
         # Fails the build if line coverage drops below 89%. Tightening
         # back to 90% (and beyond to 95/98%) is on the books once the
@@ -108,13 +164,53 @@ jobs:
     name: Cargo audit (CVE scan)
     runs-on: ubuntu-latest
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - uses: actions/checkout@v7
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Install cargo-audit
         run: cargo install --locked cargo-audit
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Run cargo audit
         # Fails the build if any known vulnerability is found in the dependency
         # tree. Dependabot covers GitHub-side scanning; this catches CVEs at PR
@@ -142,8 +238,24 @@ jobs:
     # se teste en poussant la branche dans ce dépôt.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - uses: actions/checkout@v7
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Environnement
         # Le service tourne en LaunchAgent : son PATH vient du fichier `.env`
         # à la racine du runner, pas du shell interactif. Si un outil manque
@@ -154,6 +266,14 @@ jobs:
           echo "xcodegen : $(xcodegen --version 2>&1 | head -1)"
           echo "cargo    : $(cargo --version 2>&1)"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Purge des copies de conflit iCloud
         # Le repo de dev vit dans iCloud, qui fabrique des "Foo 2.swift".
         # Le checkout du runner est propre, mais xcodegen lit `app/` et un
@@ -162,11 +282,27 @@ jobs:
           find app -name "* [2-9].swift" -delete 2>/dev/null || true
           find app -name "* [2-9].xcodeproj" -type d -exec rm -rf {} + 2>/dev/null || true
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Build du xcframework Rust
         # Le xcframework est gitignored et reconstruit à la demande — les
         # tests Swift ne compilent pas sans lui.
         run: ./build-xcframework.sh
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Secrets de build (placeholders)
         # `app/Config/Secrets.xcconfig` est gitignored — il porte le DSN Sentry
         # et l'URL du proxy Notion — donc absent d'un checkout frais, et
@@ -179,6 +315,14 @@ jobs:
             cp app/Config/Secrets.xcconfig.example app/Config/Secrets.xcconfig
           fi
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Génération du projet Xcode
         # `patch-app-icon.rb` est délibérément best-effort ici. Il réinjecte la
         # référence à app/Pinkha.icon que xcodegen ne conserve pas — donc utile
@@ -192,6 +336,14 @@ jobs:
           ./utilities/scripts/patch-app-icon.rb \
             || echo "::notice::patch-app-icon ignoré (gem xcodeproj absente) — sans effet sur les tests"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Simulateur
         id: sim
         # Résolu par nom, comme les scripts locaux. `bootstatus -b` bloque
@@ -209,6 +361,14 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Tests unitaires + intégration
         # Les XCUITest sont volontairement exclus : ils exigent une session
         # graphique connectée, alors que le runner tourne en LaunchAgent.
