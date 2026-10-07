@@ -43,6 +43,7 @@ on:
     branches: [dev, beta-test, app-store]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -51,15 +52,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # Dependabot vise `dev` (cf. .github/dependabot.yml). Une mise à jour de
-      # dépendance n'a pas d'appareil à traverser, et l'exclure obligerait à la
-      # recopier à la main dans `device` — soit exactement le genre de détour
-      # qu'on finit par contourner.
+      - name: Live Activity · refresh
+        if: startsWith(github.head_ref, 'dependabot/')
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Dependency updates go straight to dev
         id: deps
         if: startsWith(github.head_ref, 'dependabot/')
         run: echo "skip=true" >> "$GITHUB_OUTPUT"
 
+      - name: Live Activity · refresh
+        if: steps.deps.outputs.skip != 'true' && github.base_ref == 'dev' && github.head_ref != 'device'
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: PRs to dev must come from device
         if: steps.deps.outputs.skip != 'true' && github.base_ref == 'dev' && github.head_ref != 'device'
         run: |
@@ -69,6 +84,15 @@ jobs:
           echo "Apple from device — that is the whole point."
           exit 1
 
+      - name: Live Activity · refresh
+        if: github.base_ref == 'beta-test' && github.head_ref != 'dev'
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: PRs to beta-test must come from dev
         if: github.base_ref == 'beta-test' && github.head_ref != 'dev'
         run: |
@@ -77,6 +101,15 @@ jobs:
           echo "devices. Once seen for real, it is promoted to invited testers."
           exit 1
 
+      - name: Live Activity · refresh
+        if: github.base_ref == 'app-store' && github.head_ref != 'beta-test'
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: PRs to app-store must come from beta-test
         if: github.base_ref == 'app-store' && github.head_ref != 'beta-test'
         run: |
@@ -85,5 +118,13 @@ jobs:
           echo "it in their hands first — that is what beta-test guarantees."
           exit 1
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: The chain holds
         run: echo "« ${{ github.head_ref }} » → « ${{ github.base_ref }} » — step respected."
