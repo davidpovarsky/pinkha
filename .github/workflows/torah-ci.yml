@@ -44,10 +44,36 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 25
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - uses: actions/checkout@v7
+      - name: Live Activity · refresh
+        if: inputs.package_test_filter == '' && (inputs.full_suite == true || inputs.run_package_tests == true)
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Swift package tests
         if: inputs.package_test_filter == '' && (inputs.full_suite == true || inputs.run_package_tests == true)
         run: swift test --package-path app/Packages/PinkhaTorah
+      - name: Live Activity · refresh
+        if: inputs.package_test_filter != ''
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Focused Swift package test
         if: inputs.package_test_filter != ''
         env:
@@ -60,22 +86,70 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - uses: actions/checkout@v7
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Install XcodeGen
         run: command -v xcodegen >/dev/null || brew install xcodegen
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Environment
         run: |
           set -euo pipefail
           xcodebuild -version
           swift --version
           xcodegen --version
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Build Pinkha Rust XCFramework
         run: ./extensions/torah/scripts/build-with-torah.sh
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Build configuration
         run: |
           cp app/Config/Secrets.xcconfig.example app/Config/Secrets.xcconfig
           cd app
           xcodegen generate
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Create and boot simulator
         id: simulator
         run: |
@@ -98,14 +172,41 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+      - name: Live Activity · refresh
+        if: github.event_name != 'workflow_dispatch' || inputs.full_suite != true
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Focused Torah association UI tests
         if: github.event_name != 'workflow_dispatch' || inputs.full_suite != true
         env:
           UI_TEST_FILTER: ${{ inputs.ui_test_filter }}
         run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" focused "$UI_TEST_FILTER"
+      - name: Live Activity · refresh
+        if: github.event_name == 'workflow_dispatch' && inputs.full_suite == true
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Final full unit, integration, and UI suite
         if: github.event_name == 'workflow_dispatch' && inputs.full_suite == true
         run: ./extensions/torah/scripts/run-torah-ui-tests.sh '${{ steps.simulator.outputs.udid }}' "$RUNNER_TEMP/PinkhaTests.xcresult" full
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Collect simulator crash logs
         if: always()
         run: |
@@ -113,6 +214,15 @@ jobs:
           xcrun simctl spawn '${{ steps.simulator.outputs.udid }}' log show --last 20m --style compact \
             --predicate 'process == "Pinkha" OR eventMessage CONTAINS "Pinkha"' \
             > "$RUNNER_TEMP/simulator-logs/pinkha.log" 2>&1 || true
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Upload XCTest result and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,6 +232,15 @@ jobs:
             ${{ runner.temp }}/PinkhaTests.xcresult
             ${{ runner.temp }}/simulator-logs
           if-no-files-found: warn
+      - name: Live Activity · refresh
+        if: always()
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Delete temporary simulator
         if: always()
         run: xcrun simctl delete '${{ steps.simulator.outputs.udid }}' || true
